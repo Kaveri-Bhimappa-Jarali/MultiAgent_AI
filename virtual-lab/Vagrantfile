@@ -1,0 +1,83 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# Multi-Machine Virtual Enterprise Network Lab Configuration
+# For Oracle VirtualBox / Vagrant
+# Architecture:
+# - SOC Host:      192.168.56.1:8000 (Windows Host)
+# - Endpoint VM:   192.168.56.10     (Employee Workstation)
+# - Server VM:     192.168.56.15     (Internal Enterprise Server)
+# - Attacker VM:   192.168.56.20     (Security Testbed System)
+
+Vagrant.configure("2") do |config|
+  config.vm.box = "generic/alpine319" # Lightweight Alpine Linux (uses only ~128MB RAM per VM)
+
+  # -------------------------------------------------------------
+  # 1. Endpoint Workstation VM
+  # -------------------------------------------------------------
+  config.vm.define "endpoint" do |endpoint|
+    endpoint.vm.hostname = "vm-endpoint-01"
+    endpoint.vm.network "private_network", ip: "192.168.56.10"
+
+    endpoint.vm.provider "virtualbox" do |vb|
+      vb.name = "SOC-Lab-Endpoint-01"
+      vb.memory = "512"
+      vb.cpus = 1
+    end
+
+    endpoint.vm.provision "shell", inline: <<-SHELL
+      apk update && apk add python3 py3-pip openssh-server sudo iptables
+      rc-update add sshd default
+      service sshd start
+      adduser -D sarah.connor
+      echo "sarah.connor:CyberSec2026!" | chpasswd
+      echo "sarah.connor ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+      echo "Endpoint VM provisioned successfully at 192.168.56.10"
+    SHELL
+  end
+
+  # -------------------------------------------------------------
+  # 2. Internal Enterprise Server VM
+  # -------------------------------------------------------------
+  config.vm.define "server" do |server|
+    server.vm.hostname = "vm-server-01"
+    server.vm.network "private_network", ip: "192.168.56.15"
+
+    server.vm.provider "virtualbox" do |vb|
+      vb.name = "SOC-Lab-Server-01"
+      vb.memory = "512"
+      vb.cpus = 1
+    end
+
+    server.vm.provision "shell", inline: <<-SHELL
+      apk update && apk add python3 py3-pip openssh-server sudo iptables curl
+      rc-update add sshd default
+      service sshd start
+      mkdir -p /var/backups
+      echo "-- SENSITIVE DATABASE BACKUP DUMP --" > /var/backups/customers_backup.sql
+      adduser -D vikram.sharma
+      echo "vikram.sharma:ServerPass2026!" | chpasswd
+      echo "vikram.sharma ALL=(ALL) ALL" >> /etc/sudoers
+      echo "Server VM provisioned successfully at 192.168.56.15"
+    SHELL
+  end
+
+  # -------------------------------------------------------------
+  # 3. Attacker / Testbed VM
+  # -------------------------------------------------------------
+  config.vm.define "attacker" do |attacker|
+    attacker.vm.hostname = "vm-attacker-01"
+    attacker.vm.network "private_network", ip: "192.168.56.20"
+
+    attacker.vm.provider "virtualbox" do |vb|
+      vb.name = "SOC-Lab-Attacker-01"
+      vb.memory = "512"
+      vb.cpus = 1
+    end
+
+    attacker.vm.provision "shell", inline: <<-SHELL
+      apk update && apk add python3 nmap openssh-client curl
+      echo "Attacker VM provisioned successfully at 192.168.56.20"
+    SHELL
+  end
+end

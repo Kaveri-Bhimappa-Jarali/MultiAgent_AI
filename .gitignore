@@ -1,0 +1,20 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.joblib
+*.db
+*.db-wal
+*.db-shm
+.pytest_cache/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# OS & Environment
+.env
+.DS_Store
+Thumbs.db
