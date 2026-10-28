@@ -7,8 +7,8 @@ from sklearn.preprocessing import RobustScaler
 from datetime import datetime
 
 MODEL_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
-MODEL_PATH = os.path.join(MODEL_DIR, "anomaly_isolation_forest.joblib")
-SCALER_PATH = os.path.join(MODEL_DIR, "anomaly_scaler.joblib")
+MODEL_PATH = os.path.join(MODEL_DIR, "event_isolation_forest.joblib")
+SCALER_PATH = os.path.join(MODEL_DIR, "event_scaler.joblib")
 
 class AnomalyDetectionEngine:
     def __init__(self):
@@ -59,8 +59,11 @@ class AnomalyDetectionEngine:
             try:
                 self.model = joblib.load(MODEL_PATH)
                 self.scaler = joblib.load(SCALER_PATH)
-                self.is_trained = True
-                return
+                if hasattr(self.scaler, "n_features_in_") and self.scaler.n_features_in_ == 7:
+                    self.is_trained = True
+                    return
+    
+
             except Exception as e:
                 print(f"Failed to load cached anomaly model: {e}")
 

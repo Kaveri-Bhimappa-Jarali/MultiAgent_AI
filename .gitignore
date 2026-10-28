@@ -1,12 +1,19 @@
 # Python
 .venv/
+wheels/
+.tools/
+ref_repo/
 __pycache__/
 *.py[cod]
 *$py.class
-*.joblib
 *.db
 *.db-wal
 *.db-shm
+*.sqlite
+*.sqlite3
+acceptance_test.db
+soc_acceptance_audit.db
+test_audit_db*.db
 .pytest_cache/
 
 # Node

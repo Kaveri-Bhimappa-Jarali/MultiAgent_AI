@@ -284,7 +284,9 @@ def main():
     # -------------------------------------------------------------------------
     print("\n[CHECK 7] Validating Evidence-Based Containment Verification...")
     from app.models.response import ResponseAction
-    action = db.query(ResponseAction).filter(ResponseAction.incident_id == inc.incident_id).first()
+    action = db.query(ResponseAction).filter(ResponseAction.incident_id == inc.incident_id, ResponseAction.target_value == novel_ip).first()
+    if not action:
+        action = db.query(ResponseAction).filter(ResponseAction.incident_id == inc.incident_id).first()
     if action:
         approve_response_action(db, action.action_id, approved_by="Analyst-1")
         execute_response_action(db, action.action_id, actor="SOAR-Daemon", dry_run=True)
