@@ -25,3 +25,9 @@ frontend/.vite/
 .env
 .DS_Store
 Thumbs.db
+
+# Large Raw Datasets (Acquire via: python scripts/download_datasets.py)
+data/raw/*/*.csv
+data/processed/*.csv
+!data/raw/**/.gitkeep
+
