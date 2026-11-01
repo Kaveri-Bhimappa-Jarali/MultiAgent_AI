@@ -16,6 +16,7 @@ import {
   Activity
 } from 'lucide-react';
 import { useWebSocket } from '../context/WebSocketContext';
+import { formatSocTimestamp } from '../utils/timestamps.js';
 
 export const Agents: React.FC = () => {
   const [agents, setAgents] = useState<AgentStatus[]>([]);
@@ -183,7 +184,7 @@ export const Agents: React.FC = () => {
                       <span className="text-[10px] text-mutedslate">({r.run_id})</span>
                     </div>
                     <div className="text-[10px] text-slate-400 mt-0.5">
-                      {new Date(r.start_time).toLocaleTimeString()} • Duration: {r.duration_ms}ms • Findings: {r.findings_count}
+                      {formatSocTimestamp(r.start_time)} • Duration: {r.duration_ms}ms • Findings: {r.findings_count}
                     </div>
                   </div>
                   <StatusBadge status={r.status} />
@@ -260,7 +261,7 @@ export const Agents: React.FC = () => {
               <div className="p-3.5 rounded-xl bg-navy-950 border border-slate-800 space-y-1 max-h-60 overflow-y-auto text-[11px]">
                 {selectedRun.execution_log && selectedRun.execution_log.map((log: any, idx: number) => (
                   <div key={idx} className="text-slate-300">
-                    <span className="text-slate-500">[{log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : 'UTC'}]</span>{' '}
+                    <span className="text-slate-500">[{log.timestamp ? formatSocTimestamp(log.timestamp) : '—'}]</span>{' '}
                     <span className={log.level === 'ERROR' ? 'text-soccritical' : 'text-royal-300'}>
                       [{log.level}]
                     </span>{' '}

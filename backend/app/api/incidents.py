@@ -16,6 +16,7 @@ from app.schemas.incident import (
 from app.schemas.event import SecurityEventResponse
 from app.services.risk_service import calculate_incident_risk
 from app.agents.orchestrator import MultiAgentSOCEngine
+from app.services.time_utils import utc_isoformat
 
 router = APIRouter(prefix="/incidents", tags=["Incidents"])
 
@@ -65,7 +66,7 @@ def get_incident_detail(incident_id: str, db: Session = Depends(get_db)):
             "criticality_multiplier": risk.criticality_multiplier,
             "factors": risk.factors,
             "explanation": risk.explanation,
-            "assessed_at": risk.assessed_at.isoformat()
+            "assessed_at": utc_isoformat(risk.assessed_at)
         }
 
     # Response Actions
@@ -82,9 +83,9 @@ def get_incident_detail(incident_id: str, db: Session = Depends(get_db)):
             "is_dry_run": r.is_dry_run,
             "requires_approval": r.requires_approval,
             "approved_by": r.approved_by,
-            "approved_at": r.approved_at.isoformat() if r.approved_at else None,
+            "approved_at": utc_isoformat(r.approved_at) if r.approved_at else None,
             "execution_result": r.execution_result,
-            "executed_at": r.executed_at.isoformat() if r.executed_at else None
+            "executed_at": utc_isoformat(r.executed_at) if r.executed_at else None
         } for r in resp_actions
     ]
 
@@ -98,7 +99,7 @@ def get_incident_detail(incident_id: str, db: Session = Depends(get_db)):
             "checks_performed": v.checks_performed,
             "observed_events_count": v.observed_events_count,
             "evidence_summary": v.evidence_summary,
-            "verified_at": v.verified_at.isoformat()
+            "verified_at": utc_isoformat(v.verified_at)
         } for v in ver_results
     ]
 
@@ -110,7 +111,7 @@ def get_incident_detail(incident_id: str, db: Session = Depends(get_db)):
             "action": a.action,
             "previous_state": a.previous_state,
             "new_state": a.new_state,
-            "timestamp": a.timestamp.isoformat()
+            "timestamp": utc_isoformat(a.timestamp)
         } for a in audits
     ]
 
@@ -126,7 +127,7 @@ def get_incident_detail(incident_id: str, db: Session = Depends(get_db)):
             "description": f.description,
             "evidence": f.evidence,
             "recommendations": f.recommendations,
-            "created_at": f.created_at.isoformat()
+            "created_at": utc_isoformat(f.created_at)
         } for f in agent_findings if incident_id in str(f.evidence) or any(eid in str(f.evidence) for eid in event_ids)
     ]
 

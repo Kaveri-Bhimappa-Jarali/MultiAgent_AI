@@ -11,6 +11,27 @@ This guide details how to install and run the authentic SOC telemetry agent (`vm
 
 ---
 
+## Running Local Guest-Agent Processes
+
+From the repository root, run `python virtual-lab/run_local_virtual_nodes.py` to
+start one local agent process per configured node. These are local processes
+representing guest nodes, not independent virtual machines. The runner waits
+until all three processes are alive and each has received an actual heartbeat
+acknowledgement from the SOC backend before reporting readiness.
+
+The backend launcher (`start.bat`) uses port 8000 by default. To target a
+backend at a different address or port, set `SOC_HOST_URL` to that backend's
+base URL; it must point to the running backend:
+
+```powershell
+$env:SOC_HOST_URL = "http://127.0.0.1:8000"
+python virtual-lab/run_local_virtual_nodes.py
+```
+
+An optional first command-line argument overrides `SOC_HOST_URL`.
+
+---
+
 ## 2. Quick-Start Execution
 
 ### On Endpoint VM (192.168.56.10):

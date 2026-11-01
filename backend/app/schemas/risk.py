@@ -1,8 +1,9 @@
 from pydantic import BaseModel
 from typing import Dict, Any
 from datetime import datetime
+from app.schemas.base import UTCBaseModel
 
-class RiskAssessmentResponse(BaseModel):
+class RiskAssessmentResponse(UTCBaseModel):
     id: int
     incident_id: str
     overall_score: int

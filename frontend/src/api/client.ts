@@ -114,12 +114,14 @@ export const api = {
   // Responses & SOAR
   getResponses: (status?: string) =>
     request<ResponseAction[]>(`/responses${status ? `?status=${status}` : ''}`),
-  approveResponse: (actionId: string, approver = 'Lead SOC Analyst') =>
-    request<ResponseAction>(`/responses/${actionId}/approve`, { method: 'POST', body: JSON.stringify({ approver }) }),
+  approveResponse: (actionId: string) =>
+    request<ResponseAction>(`/responses/${actionId}/approve`, { method: 'POST' }),
+  simulateResponse: (actionId: string) =>
+    request<ResponseAction>(`/responses/${actionId}/simulate`, { method: 'POST' }),
   executeResponse: (actionId: string, dryRun = true) =>
     request<ResponseAction>(`/responses/${actionId}/execute`, {
       method: 'POST',
-      body: JSON.stringify({ actor: 'SOC Operator', dry_run: dryRun })
+      body: JSON.stringify({ dry_run: dryRun })
     }),
   verifyResponse: (actionId: string) =>
     request<VerificationResult>(`/responses/${actionId}/verify`, { method: 'POST' }),

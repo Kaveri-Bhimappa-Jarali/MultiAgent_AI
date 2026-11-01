@@ -5,10 +5,14 @@ from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
 
 from app.models.vm_node import VMNode, VMAction
+from app.models.response import ResponseAction
+from app.models.incident import Incident
 from app.models.event import SecurityEvent
 from app.schemas.event import SecurityEventCreate
 from app.services.ingestion_service import normalize_and_ingest_events
 from app.services.broadcaster import broadcaster
+from app.services.audit_service import log_audit_entry
+from app.services.time_utils import utc_isoformat
 
 DEFAULT_LAB_NODES = [
     {
@@ -162,7 +166,7 @@ def get_pending_vm_actions(db: Session, vm_id: str) -> List[Dict[str, Any]]:
             "action_type": a.action_type,
             "target_value": a.target_value,
             "command_to_run": a.command_to_run,
-            "created_at": a.created_at.isoformat()
+            "created_at": utc_isoformat(a.created_at)
         }
         for a in actions
     ]
@@ -177,11 +181,107 @@ def record_vm_action_result(
         return None
 
     now = datetime.now(timezone.utc)
-    success = execution_result.get("success", True)
-    action.status = "EXECUTED_ON_VM" if success else "FAILED_ON_VM"
+    success = execution_result.get("success") is True
+    actual_execution = execution_result.get("actual_execution") is True
+    simulated = execution_result.get("simulated") is True
+    action.status = (
+        "EXECUTED_ON_VM"
+        if success and actual_execution
+        else "SIMULATED_ON_VM"
+        if success and simulated
+        else "FAILED_ON_VM"
+    )
     action.executed_at = now
     action.vm_execution_result = execution_result
     db.commit()
+
+    response_actions = db.query(ResponseAction).filter(
+        ResponseAction.status == "PENDING_VERIFICATION"
+    ).all()
+    response_action = next(
+        (
+            response for response in response_actions
+            if (response.execution_result or {}).get("vm_action_id") == action.action_id
+        ),
+        None,
+    )
+    if response_action:
+        if action.status == "SIMULATED_ON_VM":
+            response_action.status = "SIMULATED"
+            response_action.is_dry_run = True
+            response_action.execution_result = {
+                **(response_action.execution_result or {}),
+                "simulation_status": "SIMULATED",
+                "is_simulation": True,
+                "actual_system_changes": False,
+                "actual_execution": False,
+                "execution_dispatched": True,
+                "simulation_evidence": execution_result,
+            }
+        elif action.status == "EXECUTED_ON_VM":
+            response_action.status = "EXECUTED"
+            response_action.executed_at = now
+            response_action.execution_result = {
+                **(response_action.execution_result or {}),
+                "actual_system_changes": True,
+                "actual_execution": True,
+                "execution_confirmed_at": now.isoformat(),
+                "vm_execution_result": execution_result,
+            }
+        else:
+            response_action.status = "FAILED"
+            response_action.execution_result = {
+                **(response_action.execution_result or {}),
+                "actual_system_changes": "unknown; guest reported failure",
+                "actual_execution": False,
+                "vm_execution_result": execution_result,
+            }
+        incident = db.query(Incident).filter(
+            Incident.incident_id == response_action.incident_id
+        ).first()
+        if incident:
+            incident.response_status = response_action.status
+        db.commit()
+        if action.status == "EXECUTED_ON_VM":
+            from app.services.verification_service import create_and_run_verification
+
+            create_and_run_verification(
+                db,
+                response_action.action_id,
+                response_action.incident_id,
+            )
+        elif action.status == "SIMULATED_ON_VM":
+            from app.services.verification_service import create_simulation_verification
+
+            create_simulation_verification(
+                db,
+                response_action,
+                "Verification Engine",
+                incident.status if incident else None,
+            )
+        else:
+            from app.services.verification_service import create_and_run_verification
+
+            create_and_run_verification(
+                db,
+                response_action.action_id,
+                response_action.incident_id,
+            )
+
+    log_audit_entry(
+        db,
+        actor=f"VM Guest:{action.vm_id}",
+        action="VM_RESPONSE_ACTION_RESULT",
+        target_type="VM_ACTION",
+        target_id=action.action_id,
+        details={
+            "status": action.status,
+            "actual_execution": actual_execution,
+            "simulated": simulated,
+            "execution_result": execution_result,
+        },
+        status="SUCCESS" if action.status in {"EXECUTED_ON_VM", "SIMULATED_ON_VM"} else "FAILED",
+    )
 
     broadcaster.publish_sync("VM_ACTION_EXECUTED", {
         "action_id": action.action_id,
@@ -218,8 +318,8 @@ def get_lab_nodes_status(db: Session) -> List[Dict[str, Any]]:
             "events_count": n.events_count,
             "detections_count": n.detections_count,
             "active_collectors": n.active_collectors,
-            "last_heartbeat_at": n.last_heartbeat_at.isoformat() if n.last_heartbeat_at else None,
-            "last_telemetry_at": n.last_telemetry_at.isoformat() if n.last_telemetry_at else None,
+            "last_heartbeat_at": utc_isoformat(n.last_heartbeat_at) if n.last_heartbeat_at else None,
+            "last_telemetry_at": utc_isoformat(n.last_telemetry_at) if n.last_telemetry_at else None,
             "system_metrics": n.system_metrics
         })
     return statuses

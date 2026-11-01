@@ -8,15 +8,31 @@ from app.models.incident import Incident, IncidentEvent
 from app.models.response import ResponseAction, VerificationResult
 from app.schemas.event import SecurityEventCreate
 from app.services.ingestion_service import normalize_and_ingest_events
-from app.agents.orchestrator import MultiAgentSOCEngine
-from app.services.risk_service import calculate_incident_risk
-from app.services.response_service import execute_response_action
-from app.services.verification_service import create_and_run_verification
+
+
+def _queue_scenario_events(
+    db: Session,
+    scenario_id: str,
+    events: List[SecurityEventCreate]
+) -> Dict[str, Any]:
+    for event in events:
+        event.source_type = "DEMO_SCENARIO"
+        event.source_identifier = f"scenario:{scenario_id}"
+
+    ingestion, saved_events = normalize_and_ingest_events(
+        db, events, auto_queue=True
+    )
+    return {
+        "events_generated": ingestion.accepted,
+        "events_queued": ingestion.queued_for_processing,
+        "event_ids": [event.event_id for event in saved_events],
+        "ingestion": ingestion.model_dump()
+    }
+
 
 def run_scenario_1_brute_force(db: Session) -> Dict[str, Any]:
     """
-    Scenario 1: Brute-force Authentication Attack
-    Repeated SSH/RDP failed logins -> Detection -> Auth Agent -> Incident -> Response (Block IP) -> Verification.
+    Persist and queue brute-force authentication events for realtime processing.
     """
     attacker_ip = "185.220.101.45"
     target_user = "sarah.connor"
@@ -26,7 +42,7 @@ def run_scenario_1_brute_force(db: Session) -> Dict[str, Any]:
     events_to_create = []
     for i in range(5):
         events_to_create.append(SecurityEventCreate(
-            event_id=f"EVT-BF-{uuid.uuid4().hex[:6].upper()}",
+            event_id=f"EVT-BF-{uuid.uuid4().hex[:12].upper()}",
             event_type="authentication",
             severity="HIGH" if i >= 3 else "MEDIUM",
             timestamp=now - timedelta(seconds=120 - (i * 20)),
@@ -43,30 +59,18 @@ def run_scenario_1_brute_force(db: Session) -> Dict[str, Any]:
             raw_payload=f"PAM-AUTH-FAIL: authentication failure; logname= uid=0 euid=0 tty=ssh ruser= rhost={attacker_ip} user={target_user}"
         ))
 
-    ingest_res, saved_events = normalize_and_ingest_events(db, events_to_create)
-
-    # 2. Run Multi-Agent SOC pipeline
-    engine = MultiAgentSOCEngine(db)
-    orchestration_res = engine.run_pipeline(events=saved_events)
-
-    # 3. Locate generated incident
-    inc = db.query(Incident).filter(Incident.is_simulated == True).order_by(Incident.created_at.desc()).first()
-    if inc:
-        calculate_incident_risk(db, inc)
+    ingestion = _queue_scenario_events(db, "scenario_1", events_to_create)
 
     return {
         "scenario": "Scenario 1: Brute-Force Authentication Attack",
         "attacker_ip": attacker_ip,
         "target_user": target_user,
-        "events_generated": len(saved_events),
-        "incident_id": inc.incident_id if inc else None,
-        "orchestration": orchestration_res
+        **ingestion
     }
 
 def run_scenario_2_network_scan(db: Session) -> Dict[str, Any]:
     """
-    Scenario 2: Network Scanning & Port Sweep
-    Reconnaissance sweep -> Detection -> Network Agent -> Attack Path -> Response -> Verification.
+    Persist and queue network reconnaissance events for realtime processing.
     """
     scanner_ip = "192.0.2.144"
     target_host = "WEB-PROD-01"
@@ -76,7 +80,7 @@ def run_scenario_2_network_scan(db: Session) -> Dict[str, Any]:
     events_to_create = []
     for idx, p in enumerate(ports):
         events_to_create.append(SecurityEventCreate(
-            event_id=f"EVT-SCAN-{uuid.uuid4().hex[:6].upper()}",
+            event_id=f"EVT-SCAN-{uuid.uuid4().hex[:12].upper()}",
             event_type="network_connection",
             severity="MEDIUM" if idx < 5 else "HIGH",
             timestamp=now - timedelta(seconds=90 - (idx * 5)),
@@ -92,26 +96,18 @@ def run_scenario_2_network_scan(db: Session) -> Dict[str, Any]:
             raw_payload=f"Suricata alert: Potential Nmap SYN scan detected from {scanner_ip} to port {p}"
         ))
 
-    ingest_res, saved_events = normalize_and_ingest_events(db, events_to_create)
-    engine = MultiAgentSOCEngine(db)
-    orchestration_res = engine.run_pipeline(events=saved_events)
-
-    inc = db.query(Incident).filter(Incident.is_simulated == True).order_by(Incident.created_at.desc()).first()
-    if inc:
-        calculate_incident_risk(db, inc)
+    ingestion = _queue_scenario_events(db, "scenario_2", events_to_create)
 
     return {
         "scenario": "Scenario 2: Network Reconnaissance & Port Scanning",
         "scanner_ip": scanner_ip,
         "ports_probed": len(ports),
-        "incident_id": inc.incident_id if inc else None,
-        "orchestration": orchestration_res
+        **ingestion
     }
 
 def run_scenario_3_account_compromise(db: Session) -> Dict[str, Any]:
     """
-    Scenario 3: Multi-Stage Account Compromise
-    Failed logins -> Success post-burst -> Privilege Escalation -> Sensitive file access.
+    Persist and queue multi-stage account compromise events for realtime processing.
     """
     attacker_ip = "198.51.100.23"  # Known C2 IP from CTI
     compromised_user = "vikram.sharma"
@@ -121,7 +117,7 @@ def run_scenario_3_account_compromise(db: Session) -> Dict[str, Any]:
     events_to_create = [
         # Stage 1: Failed Auth
         SecurityEventCreate(
-            event_id=f"EVT-COMP-01-{uuid.uuid4().hex[:4].upper()}",
+            event_id=f"EVT-COMP-01-{uuid.uuid4().hex[:12].upper()}",
             event_type="authentication",
             severity="MEDIUM",
             timestamp=now - timedelta(minutes=6),
@@ -136,7 +132,7 @@ def run_scenario_3_account_compromise(db: Session) -> Dict[str, Any]:
         ),
         # Stage 2: Success Post Burst
         SecurityEventCreate(
-            event_id=f"EVT-COMP-02-{uuid.uuid4().hex[:4].upper()}",
+            event_id=f"EVT-COMP-02-{uuid.uuid4().hex[:12].upper()}",
             event_type="authentication",
             severity="CRITICAL",
             timestamp=now - timedelta(minutes=5),
@@ -151,7 +147,7 @@ def run_scenario_3_account_compromise(db: Session) -> Dict[str, Any]:
         ),
         # Stage 3: Privilege Escalation
         SecurityEventCreate(
-            event_id=f"EVT-COMP-03-{uuid.uuid4().hex[:4].upper()}",
+            event_id=f"EVT-COMP-03-{uuid.uuid4().hex[:12].upper()}",
             event_type="privilege_escalation",
             severity="CRITICAL",
             timestamp=now - timedelta(minutes=4),
@@ -164,7 +160,7 @@ def run_scenario_3_account_compromise(db: Session) -> Dict[str, Any]:
         ),
         # Stage 4: Sensitive File Access
         SecurityEventCreate(
-            event_id=f"EVT-COMP-04-{uuid.uuid4().hex[:4].upper()}",
+            event_id=f"EVT-COMP-04-{uuid.uuid4().hex[:12].upper()}",
             event_type="file_access",
             severity="HIGH",
             timestamp=now - timedelta(minutes=2),
@@ -177,26 +173,18 @@ def run_scenario_3_account_compromise(db: Session) -> Dict[str, Any]:
         )
     ]
 
-    ingest_res, saved_events = normalize_and_ingest_events(db, events_to_create)
-    engine = MultiAgentSOCEngine(db)
-    orchestration_res = engine.run_pipeline(events=saved_events)
-
-    inc = db.query(Incident).filter(Incident.is_simulated == True).order_by(Incident.created_at.desc()).first()
-    if inc:
-        calculate_incident_risk(db, inc)
+    ingestion = _queue_scenario_events(db, "scenario_3", events_to_create)
 
     return {
         "scenario": "Scenario 3: Multi-Stage Account Compromise & Data Access",
         "compromised_user": compromised_user,
         "attacker_ip": attacker_ip,
-        "incident_id": inc.incident_id if inc else None,
-        "orchestration": orchestration_res
+        **ingestion
     }
 
 def run_scenario_4_endpoint_malware(db: Session) -> Dict[str, Any]:
     """
-    Scenario 4: Suspicious Endpoint Activity & Living-Off-The-Land Binary
-    Certutil download -> Encoded PowerShell -> Vssadmin Shadow Copy Deletion.
+    Persist and queue suspicious endpoint activity for realtime processing.
     """
     host = "WS-DEV-108"
     user = "local_admin"
@@ -204,7 +192,7 @@ def run_scenario_4_endpoint_malware(db: Session) -> Dict[str, Any]:
 
     events_to_create = [
         SecurityEventCreate(
-            event_id=f"EVT-MAL-01-{uuid.uuid4().hex[:4].upper()}",
+            event_id=f"EVT-MAL-01-{uuid.uuid4().hex[:12].upper()}",
             event_type="process_execution",
             severity="HIGH",
             timestamp=now - timedelta(minutes=3),
@@ -215,7 +203,7 @@ def run_scenario_4_endpoint_malware(db: Session) -> Dict[str, Any]:
             is_simulated=True
         ),
         SecurityEventCreate(
-            event_id=f"EVT-MAL-02-{uuid.uuid4().hex[:4].upper()}",
+            event_id=f"EVT-MAL-02-{uuid.uuid4().hex[:12].upper()}",
             event_type="process_execution",
             severity="HIGH",
             timestamp=now - timedelta(minutes=2),
@@ -226,7 +214,7 @@ def run_scenario_4_endpoint_malware(db: Session) -> Dict[str, Any]:
             is_simulated=True
         ),
         SecurityEventCreate(
-            event_id=f"EVT-MAL-03-{uuid.uuid4().hex[:4].upper()}",
+            event_id=f"EVT-MAL-03-{uuid.uuid4().hex[:12].upper()}",
             event_type="process_execution",
             severity="CRITICAL",
             timestamp=now - timedelta(minutes=1),
@@ -239,19 +227,12 @@ def run_scenario_4_endpoint_malware(db: Session) -> Dict[str, Any]:
         )
     ]
 
-    ingest_res, saved_events = normalize_and_ingest_events(db, events_to_create)
-    engine = MultiAgentSOCEngine(db)
-    orchestration_res = engine.run_pipeline(events=saved_events)
-
-    inc = db.query(Incident).filter(Incident.is_simulated == True).order_by(Incident.created_at.desc()).first()
-    if inc:
-        calculate_incident_risk(db, inc)
+    ingestion = _queue_scenario_events(db, "scenario_4", events_to_create)
 
     return {
         "scenario": "Scenario 4: Endpoint Activity & Shadow Copy Deletion",
         "affected_host": host,
-        "incident_id": inc.incident_id if inc else None,
-        "orchestration": orchestration_res
+        **ingestion
     }
 
 def reset_demo_lab(db: Session) -> Dict[str, Any]:

@@ -157,10 +157,10 @@ def test_response_workflow_and_verification(db_session):
         assert approved.status == "APPROVED"
 
         executed = execute_response_action(db_session, action.action_id, actor="SOAR Engine", dry_run=True)
-        assert executed.status in ["EXECUTED", "DRY_RUN"]
+        assert executed.status == "SIMULATED"
 
         ver = create_and_run_verification(db_session, action.action_id, inc.incident_id)
-        assert ver.verification_status in ["VERIFIED_CONTAINED", "PENDING_VERIFICATION", "SIMULATED_RESPONSE_VERIFIED", "ACTUAL_LAB_RESPONSE_VERIFIED"]
+        assert ver.verification_status == "SIMULATED"
 
 def test_collector_manager_and_freshness_warnings(db_session):
     """

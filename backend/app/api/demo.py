@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
+from app.services.collectors.collector_manager import collector_manager
 from app.services.demo_service import (
     run_scenario_1_brute_force,
     run_scenario_2_network_scan,
@@ -25,5 +26,6 @@ def trigger_scenario(scenario_num: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Invalid scenario number. Choose between 1 and 4.")
 
 @router.post("/reset")
-def reset_lab(db: Session = Depends(get_db)):
+async def reset_lab(db: Session = Depends(get_db)):
+    await collector_manager.demo_collector.stop_stream()
     return reset_demo_lab(db)

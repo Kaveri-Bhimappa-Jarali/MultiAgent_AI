@@ -1,8 +1,9 @@
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from datetime import datetime
+from app.schemas.base import UTCBaseModel
 
-class DetectionRuleBase(BaseModel):
+class DetectionRuleBase(UTCBaseModel):
     rule_id: str
     name: str
     description: str
@@ -33,7 +34,7 @@ class DetectionRuleResponse(DetectionRuleBase):
     class Config:
         from_attributes = True
 
-class DetectionFindingResponse(BaseModel):
+class DetectionFindingResponse(UTCBaseModel):
     id: int
     finding_id: str
     rule_id: Optional[str]

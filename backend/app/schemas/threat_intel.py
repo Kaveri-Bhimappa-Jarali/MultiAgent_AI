@@ -1,8 +1,9 @@
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from datetime import datetime
+from app.schemas.base import UTCBaseModel
 
-class ThreatIndicatorResponse(BaseModel):
+class ThreatIndicatorResponse(UTCBaseModel):
     id: int
     indicator_type: str
     indicator_value: str

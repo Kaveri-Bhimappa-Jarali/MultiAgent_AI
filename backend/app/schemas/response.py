@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from datetime import datetime
+from app.schemas.base import UTCBaseModel
 
 class ResponseActionCreate(BaseModel):
     incident_id: str
@@ -12,7 +13,7 @@ class ResponseActionCreate(BaseModel):
     is_dry_run: bool = True
     requires_approval: bool = True
 
-class ResponseActionResponse(BaseModel):
+class ResponseActionResponse(UTCBaseModel):
     id: int
     action_id: str
     incident_id: str
@@ -33,7 +34,7 @@ class ResponseActionResponse(BaseModel):
     class Config:
         from_attributes = True
 
-class VerificationResultResponse(BaseModel):
+class VerificationResultResponse(UTCBaseModel):
     id: int
     verification_id: str
     action_id: str

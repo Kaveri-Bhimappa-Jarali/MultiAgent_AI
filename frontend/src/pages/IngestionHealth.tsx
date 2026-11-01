@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
 import { useWebSocket } from '../context/WebSocketContext';
 import { StatusBadge } from '../components/common/StatusBadge';
+import { formatSocTimestamp } from '../utils/timestamps.js';
 import {
   Activity,
   Radio,
@@ -208,7 +209,7 @@ export const IngestionHealth: React.FC = () => {
                   </div>
 
                   <div className="mt-2 text-[10px] text-mutedslate truncate">
-                    Last Event: {col.last_event_at ? new Date(col.last_event_at).toLocaleTimeString() : 'No events yet'}
+                    Last Event: {col.last_event_at ? formatSocTimestamp(col.last_event_at) : 'No events yet'}
                   </div>
                 </div>
 

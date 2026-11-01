@@ -64,20 +64,36 @@ async def control_demo_stream(payload: Dict[str, Any] = Body(...)):
     """
     Controls continuous live demo attack stream: start, pause, resume, stop.
     """
-    action = payload.get("action", "stop").lower()
-    scenario = payload.get("scenario", "scenario_1")
-    rate = float(payload.get("rate", 1.0))
+    action = payload.get("action", "stop")
+    if not isinstance(action, str):
+        raise HTTPException(status_code=400, detail="Action must be a string")
+    action = action.lower()
 
     collector = collector_manager.demo_collector
 
     if action == "start":
-        await collector.start_stream(scenario=scenario, rate=rate)
-        msg = f"Started continuous demo stream ({scenario} @ {rate} eps)"
+        scenario = payload.get("scenario", "scenario_1")
+        if not isinstance(scenario, str):
+            raise HTTPException(status_code=400, detail="Scenario must be a string")
+        try:
+            rate = float(payload.get("rate", 1.0))
+            await collector.start_stream(scenario=scenario, rate=rate)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        msg = f"Started continuous demo stream ({scenario} @ {rate:g} eps)"
     elif action == "pause":
-        await collector.pause_stream()
+        try:
+            await collector.pause_stream()
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         msg = "Paused demo stream"
     elif action == "resume":
-        await collector.resume_stream()
+        try:
+            await collector.resume_stream()
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         msg = "Resumed demo stream"
     elif action == "stop":
         await collector.stop_stream()

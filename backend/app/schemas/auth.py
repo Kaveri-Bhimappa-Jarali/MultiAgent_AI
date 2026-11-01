@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
+from app.schemas.base import UTCBaseModel
 
 class LoginRequest(BaseModel):
     username: str
@@ -18,7 +19,7 @@ class UserCreate(BaseModel):
     full_name: Optional[str] = None
     role: str = "SOC Analyst"
 
-class UserResponse(BaseModel):
+class UserResponse(UTCBaseModel):
     id: int
     username: str
     email: str

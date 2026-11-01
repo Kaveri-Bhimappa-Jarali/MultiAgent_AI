@@ -13,22 +13,32 @@ Capabilities:
 """
 
 import uuid
+import ipaddress
+import re
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
 from app.models.response import ResponseAction
-from app.models.incident import Incident, IncidentAudit
+from app.models.incident import Incident
 from app.models.vm_node import VMNode, VMAction
 from app.services.audit_service import log_audit_entry
+
+
+SIMULATABLE_ACTIONS = {
+    "BLOCK_IP": "Would add a firewall deny rule for the specified IP address.",
+    "ISOLATE_ENDPOINT": "Would restrict the specified endpoint to its SOC management channel.",
+    "DISABLE_USER": "Would disable sign-in for the specified identity.",
+}
+
 
 def approve_response_action(db: Session, action_id: str, approved_by: str) -> ResponseAction:
     action = db.query(ResponseAction).filter(ResponseAction.action_id == action_id).first()
     if not action:
         raise HTTPException(status_code=404, detail=f"Response action {action_id} not found")
 
-    if action.status not in ["RECOMMENDED", "PENDING_APPROVAL"]:
+    if action.status not in ["RECOMMENDED", "PENDING_APPROVAL", "SIMULATED"]:
         raise HTTPException(status_code=400, detail=f"Cannot approve action currently in '{action.status}' state")
 
     action.status = "APPROVED"
@@ -46,117 +56,158 @@ def approve_response_action(db: Session, action_id: str, approved_by: str) -> Re
     )
     return action
 
+
+def simulate_response_action(db: Session, action_id: str, actor: str) -> ResponseAction:
+    action = db.query(ResponseAction).filter(ResponseAction.action_id == action_id).first()
+    if not action:
+        raise HTTPException(status_code=404, detail=f"Response action {action_id} not found")
+    if action.status not in ["RECOMMENDED", "PENDING_APPROVAL", "APPROVED", "SIMULATED"]:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot simulate action currently in '{action.status}' state",
+        )
+    proposed_action = SIMULATABLE_ACTIONS.get(action.action_type)
+    if not proposed_action:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Simulation is not supported for action type '{action.action_type}'",
+        )
+
+    incident = db.query(Incident).filter(Incident.incident_id == action.incident_id).first()
+    incident_status = incident.status if incident else None
+    simulated_at = datetime.now(timezone.utc)
+    action.status = "SIMULATED"
+    action.is_dry_run = True
+    action.execution_result = {
+        "simulation_status": "SIMULATED",
+        "is_simulation": True,
+        "actual_system_changes": False,
+        "execution_dispatched": False,
+        "simulated_by": actor,
+        "simulated_at": simulated_at.isoformat(),
+        "action_type": action.action_type,
+        "target": action.target_value,
+        "incident_id": action.incident_id,
+        "proposed_action": proposed_action,
+        "expected_result": action.expected_effect,
+    }
+    db.commit()
+    db.refresh(action)
+
+    from app.services.verification_service import create_simulation_verification
+
+    create_simulation_verification(db, action, actor, incident_status)
+    log_audit_entry(
+        db,
+        actor=actor,
+        action="SIMULATE_RESPONSE_ACTION",
+        target_type="RESPONSE_ACTION",
+        target_id=action_id,
+        details={
+            "incident_id": action.incident_id,
+            "action_type": action.action_type,
+            "target": action.target_value,
+            "actual_system_changes": False,
+        },
+    )
+    return action
+
+
 def execute_response_action(db: Session, action_id: str, actor: str, dry_run: Optional[bool] = None) -> ResponseAction:
     action = db.query(ResponseAction).filter(ResponseAction.action_id == action_id).first()
     if not action:
         raise HTTPException(status_code=404, detail=f"Response action {action_id} not found")
 
+    effective_dry_run = dry_run if dry_run is not None else action.is_dry_run
+    if effective_dry_run:
+        return simulate_response_action(db, action_id, actor)
+
     if action.requires_approval and action.status != "APPROVED":
         raise HTTPException(status_code=403, detail=f"Action requires prior SOC analyst approval before execution (Current: {action.status})")
 
-    effective_dry_run = dry_run if dry_run is not None else action.is_dry_run
+    command_to_run = ""
+    target_node = None
+    if action.action_type == "BLOCK_IP":
+        try:
+            parsed_ip = ipaddress.ip_address(action.target_value)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="BLOCK_IP requires a valid IP address") from exc
+        gateways = db.query(VMNode).filter(VMNode.role == "GATEWAY").all()
+        if len(gateways) != 1:
+            raise HTTPException(
+                status_code=409,
+                detail="A single explicitly configured GATEWAY node is required for real IP blocking",
+            )
+        target_node = gateways[0]
+        firewall = "ip6tables" if parsed_ip.version == 6 else "iptables"
+        command_to_run = f"{firewall} -I INPUT -s {parsed_ip} -j DROP"
+    elif action.action_type == "DISABLE_USER":
+        if not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", action.target_value):
+            raise HTTPException(status_code=400, detail="DISABLE_USER target contains unsupported characters")
+        raise HTTPException(
+            status_code=501,
+            detail="No identity-management connector is configured; the user account was not changed",
+        )
+    elif action.action_type in ["ISOLATE_HOST", "ISOLATE_ENDPOINT"]:
+        target_node = db.query(VMNode).filter(
+            (VMNode.vm_id == action.target_value)
+            | (VMNode.ip_address == action.target_value)
+            | (VMNode.name == action.target_value)
+        ).first()
+        if not target_node or target_node.role != "ENDPOINT":
+            raise HTTPException(
+                status_code=409,
+                detail="No matching registered ENDPOINT VM is available; no isolation command was dispatched",
+            )
+        command_to_run = "iptables -I INPUT -i lo -j ACCEPT; iptables -I INPUT -s 192.168.56.1 -j ACCEPT; iptables -P INPUT DROP; iptables -P FORWARD DROP"
+    else:
+        raise HTTPException(status_code=400, detail=f"Unsupported response action type '{action.action_type}'")
 
-    execution_details = {
-        "sandbox_environment": "Enterprise_Isolated_Lab_VPC",
-        "is_dry_run": effective_dry_run,
+    vm_act = VMAction(
+        action_id=f"VMACT-{uuid.uuid4().hex[:8].upper()}",
+        incident_id=action.incident_id,
+        vm_id=target_node.vm_id,
+        action_type=action.action_type,
+        target_value=action.target_value,
+        command_to_run=command_to_run,
+        status="PENDING_VM_PULL",
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(vm_act)
+    db.flush()
+    action.status = "PENDING_VERIFICATION"
+    action.is_dry_run = False
+    action.execution_result = {
+        "is_simulation": False,
+        "actual_system_changes": "pending VM acknowledgement",
+        "execution_dispatched": True,
         "executed_by": actor,
-        "timestamp": datetime.now(timezone.utc).isoformat()
+        "dispatched_at": datetime.now(timezone.utc).isoformat(),
+        "vm_action_id": vm_act.action_id,
+        "assigned_vm_node": target_node.vm_id,
+        "command_to_run": command_to_run,
     }
 
-    cmd_applied = ""
-    if action.action_type == "BLOCK_IP":
-        cmd_applied = f"iptables -I INPUT -s {action.target_value} -j DROP; nft add rule inet filter input ip saddr {action.target_value} drop"
-        execution_details.update({
-            "firewall_vendor": "Isolated Lab Gateway / Netfilter Daemon",
-            "rule_id": f"FW-DROP-{uuid.uuid4().hex[:6].upper()}",
-            "command_applied": cmd_applied,
-            "effect": f"All ingress & egress packets to/from {action.target_value} dropped with zero acknowledgment."
-        })
-    elif action.action_type == "DISABLE_USER":
-        cmd_applied = f"passwd -l {action.target_value}; pkill -u {action.target_value}"
-        execution_details.update({
-            "identity_provider": "Enterprise Directory / Linux PAM Authority",
-            "command_applied": cmd_applied,
-            "effect": f"Identity '{action.target_value}' locked out, active sessions terminated, Kerberos/PAM tokens invalidated."
-        })
-    elif action.action_type in ["ISOLATE_HOST", "ISOLATE_ENDPOINT"]:
-        cmd_applied = f"iptables -I INPUT -s 192.168.56.1 -j ACCEPT; iptables -P INPUT DROP; iptables -P FORWARD DROP"
-        execution_details.update({
-            "edr_platform": "Enterprise Endpoint Isolation Agent",
-            "command_applied": cmd_applied,
-            "effect": f"Host '{action.target_value}' completely isolated from LAN; only management connection to SOC Host remains active."
-        })
-    else:
-        cmd_applied = f"# Executed administrative containment procedure for {action.action_type}"
-        execution_details.update({
-            "generic_action": action.action_type,
-            "target": action.target_value,
-            "effect": "Executed administrative containment procedure in isolated sandbox."
-        })
-
-    # Dispatch to real or local VM Node if available
-    target_node = db.query(VMNode).filter(
-        (VMNode.vm_id == action.target_value) |
-        (VMNode.ip_address == action.target_value) |
-        (VMNode.name == action.target_value)
-    ).first()
-    if not target_node:
-        target_node = db.query(VMNode).filter(VMNode.vm_id == "vm-endpoint-01").first()
-
-    if target_node and not effective_dry_run:
-        vm_act = VMAction(
-            action_id=f"VMACT-{uuid.uuid4().hex[:8].upper()}",
-            vm_id=target_node.vm_id,
-            action_type=action.action_type,
-            target_value=action.target_value,
-            command_to_run=cmd_applied,
-            status="PENDING_DELIVERY",
-            created_at=datetime.now(timezone.utc)
-        )
-        db.add(vm_act)
-        execution_details["vm_action_id"] = vm_act.action_id
-        execution_details["assigned_vm_node"] = target_node.vm_id
-        action.status = "ACTION_SUBMITTED"
-    else:
-        action.status = "DRY_RUN" if effective_dry_run else "EXECUTED"
-
-    action.is_dry_run = effective_dry_run
-    action.execution_result = execution_details
-    action.executed_at = datetime.now(timezone.utc)
-
-    # Update parent incident status to CONTAINED
     incident = db.query(Incident).filter(Incident.incident_id == action.incident_id).first()
     if incident:
-        prev_status = incident.status
-        incident.status = "CONTAINED"
-        incident.response_status = action.status
+        incident.response_status = "PENDING_VERIFICATION"
         incident.updated_at = datetime.now(timezone.utc)
-
-        db.add(IncidentAudit(
-            incident_id=incident.incident_id,
-            actor=actor,
-            action="DEFENSIVE_ACTION_EXECUTED",
-            previous_state=prev_status,
-            new_state="CONTAINED",
-            timestamp=datetime.now(timezone.utc)
-        ))
-
     db.commit()
-
+    db.refresh(action)
     log_audit_entry(
         db,
         actor=actor,
-        action="EXECUTE_RESPONSE_ACTION",
+        action="DISPATCH_RESPONSE_ACTION",
         target_type="RESPONSE_ACTION",
         target_id=action_id,
-        details=execution_details
+        details=action.execution_result,
     )
 
-    # Trigger response verification
     from app.services.verification_service import create_and_run_verification
-    create_and_run_verification(db, action.action_id, action.incident_id)
 
+    create_and_run_verification(db, action.action_id, action.incident_id)
     return action
+
 
 def rollback_response_action(db: Session, action_id: str, actor: str) -> ResponseAction:
     """Reverses a previously applied containment action."""

@@ -1,8 +1,9 @@
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from datetime import datetime
+from app.schemas.base import UTCBaseModel
 
-class AgentFindingResponse(BaseModel):
+class AgentFindingResponse(UTCBaseModel):
     id: int
     finding_id: str
     run_id: str
@@ -18,7 +19,7 @@ class AgentFindingResponse(BaseModel):
     class Config:
         from_attributes = True
 
-class AgentExecutionResponse(BaseModel):
+class AgentExecutionResponse(UTCBaseModel):
     id: int
     run_id: str
     agent_name: str
@@ -34,7 +35,7 @@ class AgentExecutionResponse(BaseModel):
     class Config:
         from_attributes = True
 
-class AgentStatusItem(BaseModel):
+class AgentStatusItem(UTCBaseModel):
     name: str
     role_description: str
     status: str  # IDLE, RUNNING, COMPLETED, FAILED

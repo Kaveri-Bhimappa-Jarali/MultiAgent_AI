@@ -1,12 +1,23 @@
 import asyncio
+import math
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List
 
 from app.services.collectors.base_collector import BaseCollector
 from app.schemas.event import SecurityEventCreate
 from app.database import SessionLocal
 from app.services.ingestion_service import normalize_and_ingest_events
+
+
+SUPPORTED_SCENARIOS = {
+    "scenario_1",
+    "scenario_2",
+    "scenario_3",
+    "scenario_4",
+    "normal_enterprise"
+}
+
 
 class LiveDemoStreamCollector(BaseCollector):
     def __init__(self, collector_id: str = "collector-demo-stream"):
@@ -20,6 +31,7 @@ class LiveDemoStreamCollector(BaseCollector):
         self.current_scenario: str = "scenario_1"
         self.rate_per_second: float = 1.0  # Events per second
         self.stream_history: List[Dict[str, Any]] = []
+        self.stream_state: str = "IDLE"
 
     async def start(self):
         # Default start idle
@@ -30,90 +42,136 @@ class LiveDemoStreamCollector(BaseCollector):
         self.is_running = False
 
     async def start_stream(self, scenario: str = "scenario_1", rate: float = 1.0):
-        await self.stop_stream()
+        if scenario not in SUPPORTED_SCENARIOS:
+            raise ValueError(f"Unsupported demo scenario: {scenario}")
+        if not math.isfinite(rate) or not 0.5 <= rate <= 4.0:
+            raise ValueError("Stream rate must be between 0.5 and 4.0 events/sec")
+        if self.stream_task and not self.stream_task.done():
+            raise RuntimeError("A demo stream is already active")
+        if not self.is_running:
+            raise RuntimeError("Demo stream collector is not running")
+
         self.current_scenario = scenario
-        self.rate_per_second = max(0.2, min(5.0, rate))
-        self.is_running = True
+        self.rate_per_second = rate
         self.is_paused = False
+        self.error_message = None
+        self.stream_state = "STARTING"
         self.stream_task = asyncio.create_task(self._stream_loop())
         print(f"[{self.collector_id}] Started continuous demo stream: {scenario} @ {rate} eps")
 
     async def pause_stream(self):
+        if not self.stream_task or self.stream_task.done():
+            raise RuntimeError("No active demo stream to pause")
         self.is_paused = True
+        self.stream_state = "PAUSED"
 
     async def resume_stream(self):
+        if not self.stream_task or self.stream_task.done():
+            raise RuntimeError("No active demo stream to resume")
+        if not self.is_paused:
+            raise RuntimeError("Demo stream is not paused")
         self.is_paused = False
+        self.stream_state = "STREAMING"
 
     async def stop_stream(self):
         self.is_paused = False
         if self.stream_task:
-            self.stream_task.cancel()
+            task = self.stream_task
+            task.cancel()
             try:
-                await self.stream_task
+                await task
             except asyncio.CancelledError:
                 pass
             self.stream_task = None
+        self.stream_state = "STOPPED"
         print(f"[{self.collector_id}] Stopped demo stream.")
 
     async def _stream_loop(self):
+        if not self.is_paused:
+            self.stream_state = "STREAMING"
         events_catalog = self._generate_scenario_events(self.current_scenario)
         interval = 1.0 / self.rate_per_second
 
-        while self.is_running:
-            for item in events_catalog:
-                while self.is_paused:
-                    await asyncio.sleep(0.5)
+        try:
+            while self.is_running:
+                for item in events_catalog:
+                    while self.is_paused:
+                        await asyncio.sleep(0.05)
 
-                # Clone and set live timestamp
-                now = datetime.now(timezone.utc)
-                evt = SecurityEventCreate(
-                    event_id=f"EVT-STREAM-{uuid.uuid4().hex[:6].upper()}",
-                    event_type=item["event_type"],
-                    severity=item["severity"],
-                    timestamp=now,
-                    source_ip=item.get("source_ip"),
-                    destination_ip=item.get("destination_ip"),
-                    source_port=item.get("source_port"),
-                    destination_port=item.get("destination_port"),
-                    protocol=item.get("protocol", "TCP"),
-                    username=item.get("username"),
-                    host=item.get("host"),
-                    process_name=item.get("process_name"),
-                    command_line=item.get("command_line"),
-                    file_path=item.get("file_path"),
-                    file_action=item.get("file_action"),
-                    source_type="DEMO_STREAM",
-                    source_identifier=f"scenario:{self.current_scenario}",
-                    is_simulated=True,
-                    raw_payload=item.get("raw_payload", "Live simulated telemetry stream")
-                )
+                    now = datetime.now(timezone.utc)
+                    evt = SecurityEventCreate(
+                        event_id=f"EVT-STREAM-{uuid.uuid4().hex[:12].upper()}",
+                        event_type=item["event_type"],
+                        severity=item["severity"],
+                        timestamp=now,
+                        source_ip=item.get("source_ip"),
+                        destination_ip=item.get("destination_ip"),
+                        source_port=item.get("source_port"),
+                        destination_port=item.get("destination_port"),
+                        protocol=item.get("protocol", "TCP"),
+                        username=item.get("username"),
+                        host=item.get("host"),
+                        process_name=item.get("process_name"),
+                        command_line=item.get("command_line"),
+                        file_path=item.get("file_path"),
+                        file_action=item.get("file_action"),
+                        source_type="DEMO_STREAM",
+                        source_identifier=f"scenario:{self.current_scenario}",
+                        is_simulated=True,
+                        raw_payload=item.get("raw_payload", "Live simulated telemetry stream")
+                    )
 
-                db = SessionLocal()
-                try:
-                    res, saved = normalize_and_ingest_events(db, [evt], auto_queue=True)
-                    self.total_received += 1
-                    self.total_processed += len(saved)
-                    self.last_event_at = now
-                    
-                    self.stream_history.append({
-                        "event_id": evt.event_id,
-                        "scenario": self.current_scenario,
-                        "event_type": evt.event_type,
-                        "timestamp": now.isoformat(),
-                        "summary": evt.command_line or evt.file_action or evt.event_type
-                    })
-                    if len(self.stream_history) > 50:
-                        self.stream_history.pop(0)
-                except Exception as e:
-                    self.error_count += 1
-                    self.error_message = str(e)
-                finally:
-                    db.close()
+                    db = SessionLocal()
+                    try:
+                        result, saved_events = normalize_and_ingest_events(
+                            db, [evt], auto_queue=True
+                        )
+                        if result.errors:
+                            self.error_count += result.errors
+                            self.error_message = "One or more generated events failed ingestion"
+                        if result.accepted != len(saved_events):
+                            raise RuntimeError(
+                                "Ingestion accepted count did not match persisted events"
+                            )
+                        if not saved_events:
+                            raise RuntimeError(
+                                "Generated demo event was not accepted by ingestion"
+                            )
 
-                await asyncio.sleep(interval)
+                        self.total_received += result.accepted
+                        self.last_event_at = now
+                        self.stream_history.append({
+                            "event_id": saved_events[0].event_id,
+                            "scenario": self.current_scenario,
+                            "event_type": saved_events[0].event_type,
+                            "timestamp": now.isoformat(),
+                            "summary": (
+                                saved_events[0].command_line
+                                or saved_events[0].file_action
+                                or saved_events[0].event_type
+                            )
+                        })
+                        if len(self.stream_history) > 50:
+                            self.stream_history.pop(0)
+                    except Exception as exc:
+                        self.error_count += 1
+                        self.error_message = str(exc)
+                        self.stream_state = "ERROR"
+                        print(f"[{self.collector_id}] Demo event ingestion failed: {exc}")
+                        return
+                    finally:
+                        db.close()
 
-            # Pause briefly between scenario cycles
-            await asyncio.sleep(interval * 2)
+                    await asyncio.sleep(interval)
+
+                await asyncio.sleep(interval * 2)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            self.error_count += 1
+            self.error_message = str(exc)
+            self.stream_state = "ERROR"
+            print(f"[{self.collector_id}] Demo stream failed: {exc}")
 
     def _generate_scenario_events(self, scenario: str) -> List[Dict[str, Any]]:
         if scenario == "scenario_1":
@@ -160,7 +218,9 @@ class LiveDemoStreamCollector(BaseCollector):
             "is_paused": self.is_paused,
             "current_scenario": self.current_scenario,
             "rate_per_second": self.rate_per_second,
-            "is_streaming": bool(self.stream_task and not self.stream_task.done())
+            "is_streaming": bool(self.stream_task and not self.stream_task.done()),
+            "stream_state": self.stream_state,
+            "stream_history": self.stream_history[-10:]
         })
         return res
 

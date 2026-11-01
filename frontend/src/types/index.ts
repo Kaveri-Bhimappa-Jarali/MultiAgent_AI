@@ -13,6 +13,8 @@ export interface SecurityEvent {
   id: number;
   event_id: string;
   timestamp: string;
+  ingested_at?: string;
+  processed_at?: string | null;
   event_type: string;
   severity: 'INFO' | 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   source_ip?: string;
@@ -194,7 +196,16 @@ export interface ResponseAction {
   target_value: string;
   reason: string;
   expected_effect: string;
-  status: 'RECOMMENDED' | 'PENDING_APPROVAL' | 'APPROVED' | 'EXECUTED' | 'REJECTED' | 'FAILED';
+  status:
+    | 'RECOMMENDED'
+    | 'PENDING_APPROVAL'
+    | 'APPROVED'
+    | 'SIMULATED'
+    | 'EXECUTED'
+    | 'PENDING_VERIFICATION'
+    | 'VERIFIED'
+    | 'REJECTED'
+    | 'FAILED';
   is_dry_run: boolean;
   requires_approval: boolean;
   approved_by?: string;
@@ -208,8 +219,22 @@ export interface VerificationResult {
   verification_id: string;
   action_id: string;
   incident_id: string;
-  verification_status: 'PENDING_VERIFICATION' | 'VERIFICATION_IN_PROGRESS' | 'VERIFIED_CONTAINED' | 'VERIFICATION_FAILED' | 'INCONCLUSIVE';
-  checks_performed: Array<{ check: string; passed: boolean; parameter?: string }>;
+  verification_status:
+    | 'SIMULATED'
+    | 'PENDING_VERIFICATION'
+    | 'VERIFIED'
+    | 'FAILED'
+    | 'INCONCLUSIVE'
+    | 'VERIFICATION_IN_PROGRESS'
+    | 'VERIFIED_CONTAINED'
+    | 'VERIFICATION_FAILED';
+  checks_performed: Array<{
+    check: string;
+    passed: boolean;
+    parameter?: string;
+    evidence_source?: string;
+    [key: string]: unknown;
+  }>;
   observed_events_count: number;
   evidence_summary: string;
   verified_at: string;

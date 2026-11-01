@@ -5,6 +5,7 @@ from typing import List, Dict, Any
 from app.database import get_db
 from app.models.audit import AuditLog
 from app.config import settings
+from app.services.time_utils import utc_isoformat
 
 router = APIRouter(prefix="/settings", tags=["Settings & Policies"])
 
@@ -40,6 +41,6 @@ def get_audit_logs(limit: int = Query(50, ge=1, le=200), db: Session = Depends(g
             "details": l.details,
             "ip_address": l.ip_address,
             "status": l.status,
-            "timestamp": l.timestamp.isoformat()
+            "timestamp": utc_isoformat(l.timestamp)
         } for l in logs
     ]

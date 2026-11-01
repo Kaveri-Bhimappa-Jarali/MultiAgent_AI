@@ -23,6 +23,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { formatSocTimestamp } from '../utils/timestamps.js';
 
 export const VirtualLab: React.FC = () => {
   const [nodes, setNodes] = useState<any[]>([]);
@@ -61,7 +62,7 @@ export const VirtualLab: React.FC = () => {
       if (evt.source_type && evt.source_type.startsWith('VM_')) {
         setVmLogs((prev) => [
           {
-            timestamp: new Date().toLocaleTimeString(),
+            timestamp: formatSocTimestamp(new Date()),
             vm: evt.host || 'VM-NODE',
             type: evt.event_type,
             summary: evt.command_line || evt.file_action || evt.event_type
@@ -249,7 +250,7 @@ export const VirtualLab: React.FC = () => {
                   <div>Role: <span className="text-gold">{n.role}</span></div>
                   <div>OS Platform: <span className="text-slate-400">{n.os_info}</span></div>
                   <div>Events Forwarded: <span className="text-softwhite font-bold">{n.events_count}</span></div>
-                  <div>Last Telemetry: <span className="text-slate-400">{n.last_telemetry_at ? new Date(n.last_telemetry_at).toLocaleTimeString() : 'Awaiting guest daemon'}</span></div>
+                  <div>Last Telemetry: <span className="text-slate-400">{n.last_telemetry_at ? formatSocTimestamp(n.last_telemetry_at) : 'Awaiting guest daemon'}</span></div>
                 </div>
 
                 <div className="pt-2 border-t border-navy-700/80">

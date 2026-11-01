@@ -1,6 +1,7 @@
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from typing import Optional, List, Any
 from datetime import datetime
+from app.services.time_utils import ensure_utc
 
 class SecurityEventBase(BaseModel):
     event_type: str = Field(..., description="Type of event: authentication, network_connection, process_execution, file_access, privilege_escalation")
@@ -27,6 +28,11 @@ class SecurityEventBase(BaseModel):
     is_simulated: bool = False
     raw_payload: Optional[str] = None
 
+    @field_validator("timestamp")
+    @classmethod
+    def normalize_timestamp(cls, value: Optional[datetime]) -> Optional[datetime]:
+        return ensure_utc(value) if value is not None else None
+
 class SecurityEventCreate(SecurityEventBase):
     event_id: Optional[str] = None
 
@@ -35,12 +41,18 @@ class SecurityEventResponse(SecurityEventBase):
     event_id: str
     timestamp: datetime
     ingested_at: Optional[datetime] = None
+    processed_at: Optional[datetime] = None
     detection_status: str
     processing_status: str = "PROCESSED"
     processing_error: Optional[str] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("ingested_at", "processed_at", "created_at")
+    @classmethod
+    def normalize_optional_timestamp(cls, value: Optional[datetime]) -> Optional[datetime]:
+        return ensure_utc(value) if value is not None else None
 
 class EventBatchIngest(BaseModel):
     events: List[SecurityEventCreate]

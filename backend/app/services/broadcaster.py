@@ -1,7 +1,7 @@
 import json
 import asyncio
 from datetime import datetime, timezone
-from typing import Set, Dict, Any, List
+from typing import Set, Dict, Any, List, Optional
 from fastapi import WebSocket
 
 class BroadcasterService:
@@ -11,8 +11,10 @@ class BroadcasterService:
         self.max_buffer_size = 50
         self.total_broadcasts = 0
         self._lock = asyncio.Lock()
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
 
     async def connect(self, websocket: WebSocket):
+        self._loop = asyncio.get_running_loop()
         await websocket.accept()
         async with self._lock:
             self.active_connections.add(websocket)
@@ -69,11 +71,19 @@ class BroadcasterService:
         Helper for synchronous call sites to dispatch an async broadcast on the running loop.
         """
         try:
-            loop = asyncio.get_running_loop()
-            if loop.is_running():
-                asyncio.create_task(self.broadcast(event_type, data))
+            current_loop = asyncio.get_running_loop()
         except RuntimeError:
-            # No running event loop
-            pass
+            current_loop = None
+
+        loop = self._loop or current_loop
+        if loop is None or loop.is_closed() or not loop.is_running():
+            return
+        if current_loop is loop:
+            asyncio.create_task(self.broadcast(event_type, data))
+        else:
+            loop.call_soon_threadsafe(
+                asyncio.create_task,
+                self.broadcast(event_type, data)
+            )
 
 broadcaster = BroadcasterService()

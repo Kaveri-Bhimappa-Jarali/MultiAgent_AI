@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
-import { IncidentDetail as DetailType, ResponseAction } from '../types';
+import { IncidentDetail as DetailType } from '../types';
+import { useAuth } from '../context/AuthContext';
 import { SeverityBadge } from '../components/common/SeverityBadge';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { AttackPathGraph } from '../components/attack_path/AttackPathGraph';
+import { formatSocTimestamp } from '../utils/timestamps.js';
 import {
   ShieldAlert,
+  ShieldCheck,
   ArrowLeft,
   Download,
   Bot,
@@ -35,6 +38,9 @@ export const IncidentDetail: React.FC = () => {
   const [investigating, setInvestigating] = useState(false);
   const [newNote, setNewNote] = useState('');
   const [addingNote, setAddingNote] = useState(false);
+  const [responseError, setResponseError] = useState<string | null>(null);
+  const { user } = useAuth();
+  const isSocAdmin = user?.role === 'SOC Admin';
 
   const fetchDetail = async () => {
     if (!incidentId) return;
@@ -93,28 +99,41 @@ export const IncidentDetail: React.FC = () => {
 
   const handleApproveAction = async (actionId: string) => {
     try {
+      setResponseError(null);
       await api.approveResponse(actionId);
       await fetchDetail();
     } catch (err) {
-      console.error('Failed to approve action', err);
+      setResponseError(err instanceof Error ? err.message : 'Failed to approve response action');
+    }
+  };
+
+  const handleSimulateAction = async (actionId: string) => {
+    try {
+      setResponseError(null);
+      await api.simulateResponse(actionId);
+      await fetchDetail();
+    } catch (err) {
+      setResponseError(err instanceof Error ? err.message : 'Failed to simulate response action');
     }
   };
 
   const handleExecuteAction = async (actionId: string) => {
     try {
-      await api.executeResponse(actionId, true);
+      setResponseError(null);
+      await api.executeResponse(actionId, false);
       await fetchDetail();
     } catch (err) {
-      console.error('Failed to execute action', err);
+      setResponseError(err instanceof Error ? err.message : 'Failed to dispatch response action');
     }
   };
 
   const handleVerifyAction = async (actionId: string) => {
     try {
+      setResponseError(null);
       await api.verifyResponse(actionId);
       await fetchDetail();
     } catch (err) {
-      console.error('Failed to verify response', err);
+      setResponseError(err instanceof Error ? err.message : 'Failed to verify response action');
     }
   };
 
@@ -198,8 +217,8 @@ export const IncidentDetail: React.FC = () => {
             <p className="text-xs text-mutedslate leading-relaxed font-sans">{incident.description}</p>
 
             <div className="flex flex-wrap items-center gap-6 text-xs font-mono text-mutedslate pt-2">
-              <div>First Seen: <span className="text-softwhite">{new Date(incident.first_seen).toLocaleString()}</span></div>
-              <div>Last Activity: <span className="text-softwhite">{new Date(incident.last_seen).toLocaleString()}</span></div>
+              <div>First Seen: <span className="text-softwhite">{formatSocTimestamp(incident.first_seen)}</span></div>
+              <div>Last Activity: <span className="text-softwhite">{formatSocTimestamp(incident.last_seen)}</span></div>
               <div>Assigned Analyst: <span className="text-gold font-semibold">{incident.assigned_analyst}</span></div>
               <div>Telemetry Events: <span className="text-softwhite font-bold">{incident.event_count}</span></div>
             </div>
@@ -345,8 +364,14 @@ export const IncidentDetail: React.FC = () => {
               SOAR Automated Defensive Response Console ({incident.response_actions.length} Actions)
             </h2>
           </div>
-          <span className="text-xs text-mutedslate font-mono">Dry-Run Sandbox VPC Active</span>
+          <span className="text-xs text-mutedslate font-mono">Simulation never changes lab systems</span>
         </div>
+
+        {responseError && (
+          <div role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+            {responseError}
+          </div>
+        )}
 
         {incident.response_actions.length === 0 ? (
           <p className="text-xs text-mutedslate font-mono py-4 text-center">
@@ -368,8 +393,19 @@ export const IncidentDetail: React.FC = () => {
                     <StatusBadge status={act.status} />
                   </div>
 
-                  <div className="flex items-center space-x-2">
-                    {act.status === 'PENDING_APPROVAL' && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {['RECOMMENDED', 'PENDING_APPROVAL', 'APPROVED', 'SIMULATED'].includes(act.status)
+                      && ['BLOCK_IP', 'ISOLATE_ENDPOINT', 'DISABLE_USER'].includes(act.action_type) && (
+                      <button
+                        onClick={() => handleSimulateAction(act.action_id)}
+                        className="px-3 py-1.5 rounded-lg bg-violet-500/20 text-violet-200 border border-violet-400/40 hover:bg-violet-500/30 transition flex items-center space-x-1"
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        <span>Dry Run / Simulate</span>
+                      </button>
+                    )}
+
+                    {isSocAdmin && ['RECOMMENDED', 'PENDING_APPROVAL', 'SIMULATED'].includes(act.status) && (
                       <button
                         onClick={() => handleApproveAction(act.action_id)}
                         className="px-3 py-1.5 rounded-lg bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/30 transition flex items-center space-x-1"
@@ -379,17 +415,17 @@ export const IncidentDetail: React.FC = () => {
                       </button>
                     )}
 
-                    {act.status === 'APPROVED' && (
+                    {isSocAdmin && act.status === 'APPROVED' && (
                       <button
                         onClick={() => handleExecuteAction(act.action_id)}
                         className="px-3 py-1.5 rounded-lg bg-emerald-500/20 text-socsuccess border border-socsuccess/40 hover:bg-emerald-500/30 transition flex items-center space-x-1 font-bold"
                       >
                         <Zap className="w-3.5 h-3.5 fill-current" />
-                        <span>Execute in Sandbox</span>
+                        <span>Dispatch to Lab Guest</span>
                       </button>
                     )}
 
-                    {act.status === 'EXECUTED' && (
+                    {isSocAdmin && ['EXECUTED', 'PENDING_VERIFICATION'].includes(act.status) && (
                       <button
                         onClick={() => handleVerifyAction(act.action_id)}
                         className="px-3 py-1.5 rounded-lg bg-royal/20 text-royal-200 border border-royal/40 hover:bg-royal/30 transition flex items-center space-x-1"
@@ -402,13 +438,28 @@ export const IncidentDetail: React.FC = () => {
                 </div>
 
                 <p className="text-slate-300 text-xs font-sans leading-relaxed">{act.reason}</p>
+                <p className="text-mutedslate text-xs font-sans">
+                  Proposed: {act.execution_result?.proposed_action || act.expected_effect}
+                </p>
+                <p className="text-mutedslate text-xs font-sans">
+                  Expected result: {act.execution_result?.expected_result || act.expected_effect}
+                </p>
 
-                {act.execution_result && (
-                  <div className="p-3 rounded-lg bg-navy-950 border border-slate-800 text-[11px] space-y-1">
-                    <div className="text-socsuccess font-semibold">Sandbox Execution Log:</div>
-                    <div className="text-slate-300">{act.execution_result.effect}</div>
-                    <div className="text-slate-500">Command: {act.execution_result.command_applied}</div>
+                {act.execution_result?.is_simulation && (
+                  <div className="p-3 rounded-lg bg-navy-950 border border-violet-400/30 text-[11px] space-y-1">
+                    <div className="text-violet-200 font-semibold">Simulation only — no actual containment</div>
+                    <div className="text-slate-300">{act.execution_result.proposed_action}</div>
+                    <div className="text-slate-400">
+                      Simulation status: {act.execution_result.simulation_status || act.status};
+                      actual system changes: {String(act.execution_result.actual_system_changes)}
+                    </div>
                   </div>
+                )}
+                {isSocAdmin && act.status === 'APPROVED' && (
+                  <p className="text-amber-200/90 text-[11px]">
+                    Real dispatch is separate from simulation and may execute a command on a registered lab guest.
+                    A guest acknowledgement alone is not proof of containment.
+                  </p>
                 )}
               </div>
             ))}
@@ -434,7 +485,7 @@ export const IncidentDetail: React.FC = () => {
               </div>
               <p className="text-slate-300 font-sans">{ver.evidence_summary}</p>
               <div className="text-[10px] text-mutedslate">
-                Verified at: {new Date(ver.verified_at).toUTCString()} • Subsequent telemetry monitored: {ver.observed_events_count} events
+                Verified at: {formatSocTimestamp(ver.verified_at)} • Subsequent telemetry monitored: {ver.observed_events_count} events
               </div>
             </div>
           ))}
@@ -464,7 +515,7 @@ export const IncidentDetail: React.FC = () => {
                     <span className="font-semibold text-softwhite uppercase">{evt.event_type}</span>
                     <span className="text-[10px] text-mutedslate">({evt.event_id})</span>
                   </div>
-                  <span className="text-[10px] text-slate-500">{new Date(evt.timestamp).toLocaleString()}</span>
+                  <span className="text-[10px] text-slate-500">{formatSocTimestamp(evt.timestamp)}</span>
                 </div>
                 <p className="text-slate-300 font-sans break-all">
                   {evt.command_line || evt.file_path || evt.file_action || 'Telemetry handshake recorded'}
@@ -512,7 +563,7 @@ export const IncidentDetail: React.FC = () => {
                 <div key={n.id} className="p-3 rounded-xl bg-navy-900 border border-slate-800 space-y-1">
                   <div className="flex items-center justify-between text-[10px] text-mutedslate">
                     <span className="text-gold font-bold">{n.author}</span>
-                    <span>{new Date(n.created_at).toLocaleString()}</span>
+                    <span>{formatSocTimestamp(n.created_at)}</span>
                   </div>
                   <p className="text-slate-300 font-sans">{n.note}</p>
                 </div>
@@ -536,7 +587,7 @@ export const IncidentDetail: React.FC = () => {
                     </div>
                   )}
                 </div>
-                <span className="text-[10px] text-slate-500">{new Date(a.timestamp).toLocaleTimeString()}</span>
+                <span className="text-[10px] text-slate-500">{formatSocTimestamp(a.timestamp)}</span>
               </div>
             ))}
           </div>

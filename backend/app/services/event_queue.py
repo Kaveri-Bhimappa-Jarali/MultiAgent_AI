@@ -9,6 +9,7 @@ from app.models.event import SecurityEvent
 from app.services.detection_service import evaluate_event_with_rolling_window
 from app.agents.orchestrator import MultiAgentSOCEngine
 from app.services.broadcaster import broadcaster
+from app.services.time_utils import utc_isoformat
 
 class RealtimeEventQueue:
     def __init__(self):
@@ -96,7 +97,6 @@ class RealtimeEventQueue:
     def _process_single_event_sync(self, event_id: str):
         db = SessionLocal()
         start_time = time.perf_counter()
-        now = datetime.now(timezone.utc)
 
         try:
             event = db.query(SecurityEvent).filter(SecurityEvent.event_id == event_id).first()
@@ -123,7 +123,7 @@ class RealtimeEventQueue:
                     "severity": f.severity,
                     "confidence": f.confidence,
                     "explanation": f.explanation,
-                    "timestamp": f.timestamp.isoformat()
+                    "timestamp": utc_isoformat(f.timestamp)
                 })
 
             # 2. Event-Driven Agent Orchestration & Automatic Correlation
@@ -139,11 +139,16 @@ class RealtimeEventQueue:
             event.processing_status = "PROCESSED"
             event.detection_status = "ANALYZED"
             event.processing_error = None
+            completed_at = datetime.now(timezone.utc)
+            event.processed_at = completed_at
             db.commit()
 
             self.total_processed += 1
-            self.last_processed_at = now
-            self.processed_timestamps.append(now)
+            if event.source_type == "DEMO_STREAM":
+                from app.services.collectors.collector_manager import collector_manager
+                collector_manager.demo_collector.total_processed += 1
+            self.last_processed_at = completed_at
+            self.processed_timestamps.append(completed_at)
             if len(self.processed_timestamps) > 200:
                 self.processed_timestamps = self.processed_timestamps[-200:]
 
@@ -157,7 +162,9 @@ class RealtimeEventQueue:
                 "agents_executed": dispatch_res.get("agents_executed", 0),
                 "detection_latency_ms": round(det_latency, 2),
                 "total_processing_ms": round((time.perf_counter() - start_time) * 1000, 2),
-                "timestamp": event.timestamp.isoformat()
+                "timestamp": utc_isoformat(event.timestamp),
+                "ingested_at": utc_isoformat(event.ingested_at),
+                "processed_at": utc_isoformat(event.processed_at)
             })
 
         except Exception as e:
@@ -168,6 +175,7 @@ class RealtimeEventQueue:
                 if evt:
                     evt.processing_status = "FAILED"
                     evt.processing_error = str(e)
+                    evt.processed_at = datetime.now(timezone.utc)
                     db.commit()
             except Exception:
                 pass
@@ -203,7 +211,7 @@ class RealtimeEventQueue:
             "events_processed_per_minute": proc_per_min,
             "avg_detection_latency_ms": round(avg_det_lat, 2),
             "avg_incident_latency_ms": round(avg_inc_lat, 2),
-            "last_processed_at": self.last_processed_at.isoformat() if self.last_processed_at else None
+            "last_processed_at": utc_isoformat(self.last_processed_at) if self.last_processed_at else None
         }
 
 event_queue = RealtimeEventQueue()

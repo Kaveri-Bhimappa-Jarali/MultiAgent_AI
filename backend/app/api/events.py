@@ -10,6 +10,7 @@ from app.database import get_db
 from app.models.event import SecurityEvent
 from app.schemas.event import SecurityEventResponse, SecurityEventCreate, EventBatchIngest, IngestionResult
 from app.services.ingestion_service import normalize_and_ingest_events
+from app.services.time_utils import utc_isoformat
 
 router = APIRouter(prefix="/events", tags=["Events"])
 
@@ -85,7 +86,7 @@ def export_events_csv(db: Session = Depends(get_db)):
     for e in events:
         writer.writerow([
             e.event_id,
-            e.timestamp.isoformat() if e.timestamp else "",
+            utc_isoformat(e.timestamp) if e.timestamp else "",
             e.event_type,
             e.severity,
             e.source_ip or "",

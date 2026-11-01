@@ -1,14 +1,31 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Index
+from sqlalchemy.types import TypeDecorator
 from datetime import datetime, timezone
 from app.database import Base
+from app.services.time_utils import ensure_utc
+
+
+class UTCDateTime(TypeDecorator):
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        value = ensure_utc(value)
+        return value.replace(tzinfo=None) if dialect.name == "sqlite" else value
+
+    def process_result_value(self, value, dialect):
+        return ensure_utc(value) if value is not None else None
 
 class SecurityEvent(Base):
     __tablename__ = "security_events"
 
     id = Column(Integer, primary_key=True, index=True)
     event_id = Column(String(64), unique=True, index=True, nullable=False)
-    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True, nullable=False)
-    ingested_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True, nullable=False)
+    timestamp = Column(UTCDateTime(), default=lambda: datetime.now(timezone.utc), index=True, nullable=False)
+    ingested_at = Column(UTCDateTime(), default=lambda: datetime.now(timezone.utc), index=True, nullable=False)
+    processed_at = Column(UTCDateTime(), nullable=True)
     
     # Source identification
     source_type = Column(String(50), default="API", index=True, nullable=False)  # API, LOG_FILE_WATCHER, SYSLOG, NETWORK_COLLECTOR, WINDOWS_COLLECTOR, LINUX_AUTH, DEMO_STREAM
@@ -43,7 +60,7 @@ class SecurityEvent(Base):
     
     is_simulated = Column(Boolean, default=False, index=True, nullable=False)
     raw_payload = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = Column(UTCDateTime(), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     __table_args__ = (
         Index("idx_events_type_time", "event_type", "timestamp"),

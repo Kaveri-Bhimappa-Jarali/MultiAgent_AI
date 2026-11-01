@@ -11,6 +11,7 @@ from app.models.incident import Incident, IncidentEvent, IncidentNote
 from app.models.event import SecurityEvent
 from app.models.response import ResponseAction, VerificationResult
 from app.models.risk import RiskAssessment
+from app.services.time_utils import format_ist
 
 # Design tokens
 NAVY = colors.HexColor("#0B1020")
@@ -76,7 +77,7 @@ def generate_incident_pdf(db: Session, incident_id: str) -> io.BytesIO:
 
     # Header banner
     elements.append(Paragraph("ENTERPRISE MULTI-AGENT SOC — INCIDENT DOSSIER", title_style))
-    elements.append(Paragraph(f"CONFIDENTIAL & PRIVILEGED | Generated {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}", subtitle_style))
+    elements.append(Paragraph(f"CONFIDENTIAL & PRIVILEGED | Generated {format_ist(datetime.now(timezone.utc))}", subtitle_style))
     elements.append(HRFlowable(width="100%", thickness=1.5, color=ROYAL_PURPLE, spaceAfter=10))
 
     # Incident Metadata Table
@@ -94,8 +95,8 @@ def generate_incident_pdf(db: Session, incident_id: str) -> io.BytesIO:
             Paragraph("<b>Assigned:</b>", body_style), Paragraph(incident.assigned_analyst, body_style)
         ],
         [
-            Paragraph("<b>First Observed:</b>", body_style), Paragraph(incident.first_seen.strftime('%Y-%m-%d %H:%M:%S') if incident.first_seen else 'N/A', body_style),
-            Paragraph("<b>Last Observed:</b>", body_style), Paragraph(incident.last_seen.strftime('%Y-%m-%d %H:%M:%S') if incident.last_seen else 'N/A', body_style)
+            Paragraph("<b>First Observed:</b>", body_style), Paragraph(format_ist(incident.first_seen) if incident.first_seen else 'N/A', body_style),
+            Paragraph("<b>Last Observed:</b>", body_style), Paragraph(format_ist(incident.last_seen) if incident.last_seen else 'N/A', body_style)
         ],
         [
             Paragraph("<b>Affected Users:</b>", body_style), Paragraph(", ".join(incident.affected_users or ["None"]), body_style),
@@ -193,7 +194,7 @@ def generate_soc_summary_pdf(db: Session) -> io.BytesIO:
 
     elements = [
         Paragraph("ENTERPRISE SOC EXECUTIVE SUMMARY REPORT", title_style),
-        Paragraph(f"Global Threat Operations Overview | {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}", styles['Normal']),
+        Paragraph(f"Global Threat Operations Overview | {format_ist(datetime.now(timezone.utc))}", styles['Normal']),
         HRFlowable(width="100%", thickness=1.5, color=ROYAL_PURPLE, spaceAfter=12),
         Paragraph("1. Security Posture Key Metrics", heading2_style),
     ]

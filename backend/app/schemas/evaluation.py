@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 from datetime import datetime
+from app.schemas.base import UTCBaseModel
 
 class DatasetEvaluationRequest(BaseModel):
     dataset_name: str  # UNSW-NB15, CICIDS2017
@@ -8,7 +9,7 @@ class DatasetEvaluationRequest(BaseModel):
     test_size: float = 0.25
     random_seed: int = 42
 
-class EvaluationRunResponse(BaseModel):
+class EvaluationRunResponse(UTCBaseModel):
     id: int
     run_id: str
     dataset_name: str

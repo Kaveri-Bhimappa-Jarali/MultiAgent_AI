@@ -2,9 +2,15 @@ from fastapi import APIRouter, Depends, HTTPException, Body, Header
 from sqlalchemy.orm import Session
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
+import ipaddress
+import uuid
 
 from app.database import get_db
+from app.models.incident import Incident
+from app.models.user import User
 from app.models.vm_node import VMNode, VMAction
+from app.services.auth_service import get_current_user
+from app.services.audit_service import log_audit_entry
 from app.services.vm_service import (
     get_lab_nodes_status,
     record_vm_heartbeat,
@@ -19,8 +25,8 @@ def verify_vm_auth(db: Session, vm_id: str, x_vm_key: Optional[str] = None, body
     if not node:
         raise HTTPException(status_code=404, detail=f"VM node '{vm_id}' not found")
     key = x_vm_key or body_key
-    if key and key != node.api_key:
-        raise HTTPException(status_code=401, detail="Invalid VM authentication token (X-VM-Key)")
+    if not key or key != node.api_key:
+        raise HTTPException(status_code=401, detail="Valid VM authentication token is required (X-VM-Key)")
     return node
 
 router = APIRouter(prefix="/vm", tags=["Virtual Enterprise Lab"])
@@ -110,11 +116,20 @@ def poll_pending_actions(
 def submit_action_result(
     action_id: str,
     payload: Dict[str, Any] = Body(...),
+    x_vm_key: Optional[str] = Header(None, alias="X-VM-Key"),
     db: Session = Depends(get_db)
 ):
     """
     Guest VM reports the outcome of executing a containment command.
     """
+    vm_action = db.query(VMAction).filter(VMAction.action_id == action_id).first()
+    if not vm_action:
+        raise HTTPException(status_code=404, detail="Action not found")
+    if vm_action.status != "PENDING_VM_PULL":
+        raise HTTPException(status_code=409, detail="VM action has already received a result")
+    if not x_vm_key and not payload.get("api_key"):
+        raise HTTPException(status_code=401, detail="VM authentication token is required")
+    verify_vm_auth(db, vm_action.vm_id, x_vm_key, payload.get("api_key"))
     res = record_vm_action_result(db, action_id, payload)
     if not res:
         raise HTTPException(status_code=404, detail="Action not found")
@@ -123,29 +138,67 @@ def submit_action_result(
 @router.post("/actions/create")
 def create_vm_action(
     payload: Dict[str, Any] = Body(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Enqueues a containment action to be executed on a specific VM node.
     """
+    if current_user.role != "SOC Admin":
+        log_audit_entry(
+            db,
+            actor=current_user.username,
+            action="CREATE_VM_ACTION_DENIED",
+            target_type="VM_ACTION",
+            details={"role": current_user.role},
+            status="FAILED",
+        )
+        raise HTTPException(status_code=403, detail="SOC Admin role is required to dispatch VM actions")
+    if payload.get("command"):
+        raise HTTPException(status_code=400, detail="Custom shell commands are not accepted")
+
     vm_id = payload.get("vm_id")
     action_type = payload.get("action_type", "IPTABLES_BLOCK_IP")
-    target_value = payload.get("target_value", "")
+    target_value = str(payload.get("target_value", "")).strip()
     incident_id = payload.get("incident_id")
+    node = db.query(VMNode).filter(VMNode.vm_id == vm_id).first()
+    if not node:
+        raise HTTPException(status_code=404, detail="Registered VM node not found")
+    if incident_id and not db.query(Incident).filter(Incident.incident_id == incident_id).first():
+        raise HTTPException(status_code=404, detail="Associated incident not found")
 
-    command_to_run = payload.get("command")
-    if not command_to_run:
-        if action_type == "IPTABLES_BLOCK_IP":
-            command_to_run = f"iptables -A INPUT -s {target_value} -j DROP"
-        elif action_type == "DISABLE_USER":
-            command_to_run = f"usermod -L {target_value}"
-        elif action_type == "ISOLATE_HOST":
-            command_to_run = "iptables -A INPUT -p tcp --dport 8000 -j ACCEPT; iptables -P INPUT DROP"
-        else:
-            command_to_run = f"echo 'Action {action_type} on {target_value}'"
+    if action_type in {"IPTABLES_BLOCK_IP", "BLOCK_IP"}:
+        if node.role != "GATEWAY":
+            raise HTTPException(status_code=409, detail="IP blocking requires a registered GATEWAY node")
+        try:
+            target_ip = ipaddress.ip_address(target_value)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="IP blocking requires a valid IP target") from exc
+        firewall = "ip6tables" if target_ip.version == 6 else "iptables"
+        action_type = "BLOCK_IP"
+        command_to_run = f"{firewall} -I INPUT -s {target_ip} -j DROP"
+    elif action_type in {"ISOLATE_HOST", "ISOLATE_ENDPOINT"}:
+        if node.role != "ENDPOINT" or target_value != node.vm_id:
+            raise HTTPException(
+                status_code=409,
+                detail="Endpoint isolation requires the exact vm_id of a registered ENDPOINT node",
+            )
+        action_type = "ISOLATE_ENDPOINT"
+        command_to_run = (
+            "iptables -I INPUT -i lo -j ACCEPT; "
+            "iptables -I INPUT -s 192.168.56.1 -j ACCEPT; "
+            "iptables -P INPUT DROP; iptables -P FORWARD DROP"
+        )
+    elif action_type == "DISABLE_USER":
+        raise HTTPException(
+            status_code=501,
+            detail="No identity-management connector is configured; the user account was not changed",
+        )
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported VM response action type")
 
     action = VMAction(
-        action_id=f"VMACT-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}-{vm_id}",
+        action_id=f"VMACT-{uuid.uuid4().hex[:12].upper()}",
         incident_id=incident_id,
         vm_id=vm_id,
         action_type=action_type,
@@ -156,6 +209,19 @@ def create_vm_action(
     )
     db.add(action)
     db.commit()
+    log_audit_entry(
+        db,
+        actor=current_user.username,
+        action="CREATE_VM_ACTION",
+        target_type="VM_ACTION",
+        target_id=action.action_id,
+        details={
+            "vm_id": vm_id,
+            "action_type": action_type,
+            "target_value": target_value,
+            "incident_id": incident_id,
+        },
+    )
 
     return {
         "action_id": action.action_id,

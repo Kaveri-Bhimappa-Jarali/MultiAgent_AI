@@ -14,7 +14,7 @@ class ResponseAction(Base):
     reason = Column(Text, nullable=False)
     expected_effect = Column(Text, nullable=False)
     
-    status = Column(String(30), default="RECOMMENDED", index=True, nullable=False)  # RECOMMENDED, PENDING_APPROVAL, APPROVED, EXECUTED, REJECTED, FAILED
+    status = Column(String(30), default="RECOMMENDED", index=True, nullable=False)  # PENDING_APPROVAL, APPROVED, SIMULATED, EXECUTED, PENDING_VERIFICATION, VERIFIED, FAILED
     is_dry_run = Column(Boolean, default=True, nullable=False)
     requires_approval = Column(Boolean, default=True, nullable=False)
     
@@ -32,7 +32,7 @@ class VerificationResult(Base):
     verification_id = Column(String(64), unique=True, index=True, nullable=False)
     action_id = Column(String(64), ForeignKey("response_actions.action_id", ondelete="CASCADE"), index=True, nullable=False)
     incident_id = Column(String(64), ForeignKey("incidents.incident_id", ondelete="CASCADE"), index=True, nullable=False)
-    verification_status = Column(String(40), default="PENDING_VERIFICATION", index=True, nullable=False)  # PENDING_VERIFICATION, VERIFICATION_IN_PROGRESS, VERIFIED_CONTAINED, VERIFICATION_FAILED, INCONCLUSIVE
+    verification_status = Column(String(40), default="PENDING_VERIFICATION", index=True, nullable=False)  # SIMULATED, PENDING_VERIFICATION, VERIFIED, FAILED, INCONCLUSIVE
     checks_performed = Column(JSON, default=list, nullable=False)
     observed_events_count = Column(Integer, default=0, nullable=False)
     evidence_summary = Column(Text, nullable=False)

@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useWebSocket } from '../../context/WebSocketContext';
 import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, LogOut, Play, Wifi, WifiOff, Activity } from 'lucide-react';
+import { formatSocTimestamp } from '../../utils/timestamps.js';
 
 interface TopbarProps {
   sidebarCollapsed: boolean;
@@ -47,7 +48,7 @@ export const Topbar: React.FC<TopbarProps> = ({ sidebarCollapsed }) => {
           )}
           {lastEventTime && (
             <span className="text-slate-500 hidden xl:inline">
-              (Latest: {new Date(lastEventTime).toLocaleTimeString()})
+              (Latest: {formatSocTimestamp(lastEventTime)})
             </span>
           )}
         </div>

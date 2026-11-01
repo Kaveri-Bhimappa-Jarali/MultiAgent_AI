@@ -18,6 +18,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [lastProcessedTime, setLastProcessedTime] = useState<string | null>(null);
 
   const socketRef = useRef<WebSocket | null>(null);
+  const isMountedRef = useRef(false);
   const reconnectTimeoutRef = useRef<number | null>(null);
   const heartbeatIntervalRef = useRef<number | null>(null);
   const backoffRef = useRef<number>(1000); // Exponential backoff starts at 1s
@@ -36,6 +37,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, []);
 
   const connect = useCallback(() => {
+    if (!isMountedRef.current) return;
     if (socketRef.current && (socketRef.current.readyState === WebSocket.OPEN || socketRef.current.readyState === WebSocket.CONNECTING)) {
       return;
     }
@@ -51,6 +53,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       socketRef.current = ws;
 
       ws.onopen = () => {
+        if (!isMountedRef.current) {
+          ws.close();
+          return;
+        }
         setStatus('CONNECTED');
         backoffRef.current = 1000; // Reset backoff on success
 
@@ -72,9 +78,9 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
           if (timestamp) {
             if (type === 'EVENT_INGESTED') {
-              setLastEventTime(timestamp);
+              setLastEventTime(data?.timestamp || timestamp);
             } else if (type === 'EVENT_PROCESSED') {
-              setLastProcessedTime(timestamp);
+              setLastProcessedTime(data?.processed_at || timestamp);
             }
           }
 
@@ -105,6 +111,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       };
 
       ws.onclose = () => {
+        if (!isMountedRef.current) return;
+        if (socketRef.current === ws) socketRef.current = null;
         setStatus('DISCONNECTED');
         if (heartbeatIntervalRef.current) clearInterval(heartbeatIntervalRef.current);
         // Exponential backoff reconnect up to 10s
@@ -114,7 +122,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       };
 
       ws.onerror = () => {
-        ws.close();
+        if (isMountedRef.current) ws.close();
       };
     } catch (err) {
       setStatus('DISCONNECTED');
@@ -132,11 +140,21 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, [connect]);
 
   useEffect(() => {
-    connect();
+    isMountedRef.current = true;
+    const initialConnectTimeout = window.setTimeout(connect, 0);
     return () => {
+      isMountedRef.current = false;
+      clearTimeout(initialConnectTimeout);
       if (heartbeatIntervalRef.current) clearInterval(heartbeatIntervalRef.current);
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-      if (socketRef.current) socketRef.current.close();
+      if (socketRef.current) {
+        socketRef.current.onopen = null;
+        socketRef.current.onmessage = null;
+        socketRef.current.onerror = null;
+        socketRef.current.onclose = null;
+        socketRef.current.close();
+        socketRef.current = null;
+      }
     };
   }, [connect]);
 

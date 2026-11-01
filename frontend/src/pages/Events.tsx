@@ -16,6 +16,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { useWebSocket } from '../context/WebSocketContext';
+import { formatSocTimestamp } from '../utils/timestamps.js';
 
 export const Events: React.FC = () => {
   const [events, setEvents] = useState<SecurityEvent[]>([]);
@@ -228,7 +229,7 @@ export const Events: React.FC = () => {
                     <td className="py-3 px-4">
                       <div className="font-semibold text-royal-200">{e.event_id}</div>
                       <div className="text-[10px] text-mutedslate mt-0.5">
-                        {new Date(e.timestamp).toLocaleString()}
+                        Occurred: {formatSocTimestamp(e.timestamp)}
                       </div>
                     </td>
                     <td className="py-3 px-4">
@@ -298,8 +299,16 @@ export const Events: React.FC = () => {
           <div className="space-y-4 font-mono text-xs">
             <div className="grid grid-cols-2 gap-3 p-3.5 rounded-xl bg-navy-900 border border-slate-800">
               <div>
-                <span className="text-mutedslate">Timestamp:</span>
-                <p className="text-softwhite font-semibold">{new Date(selectedEvent.timestamp).toUTCString()}</p>
+                <span className="text-mutedslate">Event Occurred:</span>
+                <p className="text-softwhite font-semibold">{formatSocTimestamp(selectedEvent.timestamp)}</p>
+              </div>
+              <div>
+                <span className="text-mutedslate">Event Ingested:</span>
+                <p className="text-softwhite font-semibold">{formatSocTimestamp(selectedEvent.ingested_at)}</p>
+              </div>
+              <div>
+                <span className="text-mutedslate">Event Processed:</span>
+                <p className="text-softwhite font-semibold">{formatSocTimestamp(selectedEvent.processed_at)}</p>
               </div>
               <div>
                 <span className="text-mutedslate">Severity:</span>

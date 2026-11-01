@@ -38,6 +38,8 @@ class VMGuestCollector:
         self.byte_offset = 0
         self.events_sent = 0
         self.actions_executed = 0
+        self.actions_simulated = 0
+        self.actions_failed = 0
         self.consecutive_failures = 0
 
         # Local offline buffer for network resilience
@@ -88,7 +90,9 @@ class VMGuestCollector:
             "disk_gb_free": disk_free_gb,
             "local_ip": self.local_ip,
             "events_sent": self.events_sent,
-            "actions_executed": self.actions_executed
+            "actions_executed": self.actions_executed,
+            "actions_simulated": self.actions_simulated,
+            "actions_failed": self.actions_failed,
         }
 
     def _post(self, path: str, payload: dict) -> dict:
@@ -179,13 +183,20 @@ class VMGuestCollector:
                 "system_metrics": metrics,
                 "active_collectors": ["auth_log", "sudo_tracker", "socket_monitor"]
             })
-            if "error" not in res:
+            sleep_seconds = self.heartbeat_interval
+            if res.get("status") == "ACK" and res.get("vm_id") == self.vm_id:
+                print(f"[{self.vm_id}] Heartbeat acknowledged by SOC Host.")
                 self._flush_buffer_if_online()
             else:
                 backoff = min(30, 2 ** min(self.consecutive_failures, 5))
-                # print(f"[{self.vm_id}] Heartbeat failure: {res.get('error')} (Retrying in {backoff}s)")
+                sleep_seconds = backoff
+                print(
+                    f"[{self.vm_id}] Heartbeat not acknowledged: "
+                    f"{res.get('error', res.get('status', 'invalid response'))} "
+                    f"(retrying in {backoff}s)"
+                )
 
-            time.sleep(self.heartbeat_interval)
+            time.sleep(sleep_seconds)
 
     def check_pending_soar_actions(self):
         while self.is_running:
@@ -206,29 +217,42 @@ class VMGuestCollector:
 
         print(f"\n[SOAR ENFORCEMENT] Received containment command: {cmd}")
         output = ""
-        success = True
+        success = False
+        actual_execution = False
 
         if sys.platform.startswith("linux") and os.geteuid() == 0:
             try:
                 res = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=10)
                 output = res.stdout or res.stderr
                 success = (res.returncode == 0)
+                actual_execution = success
             except Exception as e:
                 output = str(e)
                 success = False
         else:
-            output = f"[VM-GUEST EMULATION] Executed containment rule '{cmd}' against target {target} in local netfilter table."
+            output = (
+                f"[SIMULATED ONLY] No host command was run for {act_type} on {target}; "
+                "this guest is not a privileged Linux endpoint."
+            )
             success = True
 
-        self.actions_executed += 1
+        if actual_execution:
+            self.actions_executed += 1
+        elif success:
+            self.actions_simulated += 1
+        else:
+            self.actions_failed += 1
         self._post(f"/api/vm/actions/{act_id}/result", {
             "success": success,
+            "actual_execution": actual_execution,
+            "simulated": not actual_execution and success,
             "stdout": output,
             "executed_at": datetime.now(timezone.utc).isoformat(),
             "target": target,
             "action_type": act_type
         })
-        print(f"[SOAR ENFORCEMENT] Execution confirmed and reported to SOC for {act_id}\n")
+        result_label = "Execution reported" if actual_execution else "Simulation reported; no containment claimed"
+        print(f"[SOAR ENFORCEMENT] {result_label} for {act_id}\n")
 
     def monitor_auth_logs(self):
         target_log = self.log_path

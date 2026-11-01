@@ -7,6 +7,7 @@ from app.models.event import SecurityEvent
 from app.schemas.event import SecurityEventCreate, IngestionResult
 from app.services.event_queue import event_queue
 from app.services.broadcaster import broadcaster
+from app.services.time_utils import ensure_utc, utc_isoformat
 
 def generate_event_id(evt: SecurityEventCreate) -> str:
     if evt.event_id:
@@ -37,9 +38,7 @@ def normalize_and_ingest_events(
                 duplicates += 1
                 continue
 
-            ts = item.timestamp or now
-            if ts.tzinfo is None:
-                ts = ts.replace(tzinfo=timezone.utc)
+            ts = ensure_utc(item.timestamp or now)
 
             sec_event = SecurityEvent(
                 event_id=event_id,
@@ -82,9 +81,11 @@ def normalize_and_ingest_events(
         broadcaster.publish_sync("EVENT_INGESTED", {
             "id": e.id,
             "event_id": e.event_id,
-            "timestamp": e.timestamp.isoformat(),
-            "ingested_at": e.ingested_at.isoformat(),
+            "timestamp": utc_isoformat(e.timestamp),
+            "ingested_at": utc_isoformat(e.ingested_at),
+            "processed_at": None,
             "source_type": e.source_type,
+            "source_identifier": e.source_identifier,
             "event_type": e.event_type,
             "severity": e.severity,
             "source_ip": e.source_ip,

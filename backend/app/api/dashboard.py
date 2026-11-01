@@ -9,6 +9,7 @@ from app.models.response import ResponseAction, VerificationResult
 from app.models.detection import DetectionFinding
 from app.models.agent import AgentExecution
 from app.agents.orchestrator import AGENT_REGISTRY
+from app.services.time_utils import utc_isoformat, format_ist
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -50,7 +51,7 @@ def get_dashboard_summary(db: Session = Depends(get_db)):
         ev_count = db.query(SecurityEvent).filter(SecurityEvent.timestamp >= slot_start, SecurityEvent.timestamp < slot_end).count()
         al_count = db.query(DetectionFinding).filter(DetectionFinding.timestamp >= slot_start, DetectionFinding.timestamp < slot_end).count()
         trends.append(TrendPoint(
-            timestamp=slot_end.strftime("%H:00"),
+            timestamp=format_ist(slot_end),
             events_count=ev_count,
             alerts_count=al_count
         ))
@@ -82,7 +83,7 @@ def get_dashboard_summary(db: Session = Depends(get_db)):
             name=name,
             status=last_exec.status if last_exec else "IDLE",
             health="HEALTHY",
-            last_run=last_exec.start_time.strftime("%H:%M:%S") if last_exec else "Not yet run",
+            last_run=format_ist(last_exec.start_time) if last_exec else "Not yet run",
             findings_count=findings_count
         ))
 
@@ -95,7 +96,7 @@ def get_dashboard_summary(db: Session = Depends(get_db)):
             "severity": inc.severity,
             "risk_score": inc.risk_score,
             "status": inc.status,
-            "created_at": inc.created_at.isoformat(),
+            "created_at": utc_isoformat(inc.created_at),
             "event_count": inc.event_count
         } for inc in crit_incidents
     ]
@@ -105,7 +106,7 @@ def get_dashboard_summary(db: Session = Depends(get_db)):
     recent_events_list = [
         {
             "event_id": e.event_id,
-            "timestamp": e.timestamp.isoformat(),
+            "timestamp": utc_isoformat(e.timestamp),
             "event_type": e.event_type,
             "severity": e.severity,
             "source_ip": e.source_ip,

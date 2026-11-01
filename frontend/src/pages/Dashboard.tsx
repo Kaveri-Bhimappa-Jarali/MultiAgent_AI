@@ -34,6 +34,7 @@ import {
 } from 'recharts';
 
 import { useWebSocket } from '../context/WebSocketContext';
+import { formatSocTimestamp } from '../utils/timestamps.js';
 
 export const Dashboard: React.FC = () => {
   const [data, setData] = useState<DashboardData | null>(null);
@@ -87,7 +88,7 @@ export const Dashboard: React.FC = () => {
             return {
               ...ag,
               status: agentUpdate.status,
-              last_run: new Date().toLocaleTimeString(),
+              last_run: new Date().toISOString(),
               findings_count: (agentUpdate.findings_count !== undefined) ? agentUpdate.findings_count : ag.findings_count
             };
           }
@@ -447,7 +448,7 @@ export const Dashboard: React.FC = () => {
                 >
                   <div className="flex items-center space-x-2.5 truncate">
                     <span className="text-slate-500 text-[10px]">
-                      {new Date(evt.timestamp).toLocaleTimeString()}
+                      {formatSocTimestamp(evt.timestamp)}
                     </span>
                     <SeverityBadge severity={evt.severity} size="sm" />
                     <span className="text-royal-200 uppercase font-semibold text-[11px] truncate">

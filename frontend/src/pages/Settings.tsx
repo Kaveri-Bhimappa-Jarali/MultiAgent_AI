@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
 import { Settings as SettingsIcon, Shield, Sliders, CheckCircle2 } from 'lucide-react';
+import { formatSocTimestamp } from '../utils/timestamps.js';
 
 export const Settings: React.FC = () => {
   const [policies, setPolicies] = useState<Record<string, any>>({
@@ -151,7 +152,7 @@ export const Settings: React.FC = () => {
             <tbody className="divide-y divide-navy-700/60 text-softwhite">
               {auditLogs.map((log) => (
                 <tr key={log.id} className="hover:bg-navy-700/40 transition">
-                  <td className="py-3 px-4 text-slate-400">{new Date(log.timestamp).toLocaleString()}</td>
+                  <td className="py-3 px-4 text-slate-400">{formatSocTimestamp(log.timestamp)}</td>
                   <td className="py-3 px-4 font-bold text-gold">{log.actor}</td>
                   <td className="py-3 px-4 text-royal-200">{log.action}</td>
                   <td className="py-3 px-4 text-slate-300">

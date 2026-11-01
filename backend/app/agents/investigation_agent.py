@@ -4,6 +4,7 @@ from app.agents.base import BaseAgent
 from app.models.incident import Incident, IncidentEvent
 from app.models.event import SecurityEvent
 from app.models.detection import DetectionFinding
+from app.services.time_utils import utc_isoformat, format_ist
 
 class InvestigationAgent(BaseAgent):
     name = "Investigation Agent"
@@ -45,11 +46,11 @@ class InvestigationAgent(BaseAgent):
 
         # Chronological reconstruction
         sorted_events = sorted(events, key=lambda x: x.timestamp or x.created_at)
-        start_time = sorted_events[0].timestamp.isoformat() if sorted_events and sorted_events[0].timestamp else "N/A"
-        end_time = sorted_events[-1].timestamp.isoformat() if sorted_events and sorted_events[-1].timestamp else "N/A"
+        start_time = utc_isoformat(sorted_events[0].timestamp) if sorted_events and sorted_events[0].timestamp else "N/A"
+        end_time = utc_isoformat(sorted_events[-1].timestamp) if sorted_events and sorted_events[-1].timestamp else "N/A"
 
         timeline_snippets = [
-            f"[{e.timestamp.strftime('%H:%M:%S') if e.timestamp else 'UTC'}] {e.event_type.upper()} ({e.severity}): {e.command_line or e.file_path or e.file_action or e.raw_payload or 'activity recorded'}"
+            f"[{format_ist(e.timestamp) if e.timestamp else 'N/A'}] {e.event_type.upper()} ({e.severity}): {e.command_line or e.file_path or e.file_action or e.raw_payload or 'activity recorded'}"
             for e in sorted_events[:8]
         ]
 

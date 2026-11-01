@@ -2,8 +2,9 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from app.schemas.event import SecurityEventResponse
+from app.schemas.base import UTCBaseModel
 
-class IncidentBase(BaseModel):
+class IncidentBase(UTCBaseModel):
     title: str
     description: Optional[str] = None
     severity: str
@@ -35,7 +36,7 @@ class IncidentResponse(IncidentBase):
 class IncidentNoteCreate(BaseModel):
     note: str
 
-class IncidentNoteResponse(BaseModel):
+class IncidentNoteResponse(UTCBaseModel):
     id: int
     incident_id: str
     author: str

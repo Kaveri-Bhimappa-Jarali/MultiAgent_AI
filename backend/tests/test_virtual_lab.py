@@ -125,6 +125,8 @@ def test_vm_soar_containment_action_lifecycle(db_session):
     # 3. Guest agent reports execution result
     exec_result = {
         "success": True,
+        "actual_execution": True,
+        "simulated": False,
         "stdout": "Rule added to netfilter table INPUT",
         "returncode": 0
     }

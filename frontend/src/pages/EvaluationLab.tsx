@@ -11,6 +11,7 @@ import {
   ResponsiveContainer,
   Cell
 } from 'recharts';
+import { formatSocTimestamp } from '../utils/timestamps.js';
 
 export const EvaluationLab: React.FC = () => {
   const [datasetName, setDatasetName] = useState('UNSW-NB15');
@@ -182,7 +183,7 @@ export const EvaluationLab: React.FC = () => {
               <div className="text-[11px] font-mono text-mutedslate space-y-1">
                 <p>Dataset Sample Size: <span className="text-softwhite">{activeRun.sample_size} records</span></p>
                 <p>Run Identifier: <span className="text-royal-200">{activeRun.run_id}</span></p>
-                <p>Evaluation Timestamp: <span className="text-softwhite">{new Date(activeRun.evaluated_at).toUTCString()}</span></p>
+                <p>Evaluation Timestamp: <span className="text-softwhite">{formatSocTimestamp(activeRun.evaluated_at)}</span></p>
               </div>
             </div>
 
@@ -242,7 +243,7 @@ export const EvaluationLab: React.FC = () => {
                   <td className="py-3 px-4 text-socsuccess">{Math.round(r.accuracy * 1000) / 10}%</td>
                   <td className="py-3 px-4">{Math.round(r.f1_score * 1000) / 10}%</td>
                   <td className="py-3 px-4 text-soccritical">{Math.round(r.false_positive_rate * 1000) / 10}%</td>
-                  <td className="py-3 px-4 text-slate-400">{new Date(r.evaluated_at).toLocaleTimeString()}</td>
+                  <td className="py-3 px-4 text-slate-400">{formatSocTimestamp(r.evaluated_at)}</td>
                 </tr>
               ))}
             </tbody>
