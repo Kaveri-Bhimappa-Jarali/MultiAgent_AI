@@ -1,0 +1,71 @@
+{
+  "model_version": "v3.0-CICIDS2017-RF100",
+  "dataset_name": "CICIDS2017",
+  "model_type": "Random Forest",
+  "training_timestamp": "2026-11-01T09:05:37.369532+00:00",
+  "random_seed": 42,
+  "hyperparameters": {
+    "n_estimators": 100,
+    "max_depth": 14,
+    "min_samples_split": 4,
+    "class_weight": "balanced"
+  },
+  "dataset_provenance": {
+    "source_file": "C:\\Users\\kaver\\MultiAgent_AI\\data\\raw\\cicids2017\\Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv",
+    "file_size_mb": 73.34,
+    "sha256_hash_prefix": "c5c77255752a00bb",
+    "official_citation": "Sharafaldin et al. (2018), Toward Generating a New Intrusion Detection Dataset (CICIDS2017), ICISSP.",
+    "total_records_loaded": 15000,
+    "sampled": true
+  },
+  "split_summary": {
+    "train_samples": 9473,
+    "val_samples": 2187,
+    "test_samples": 2915,
+    "train_class_ratio": 0.004961469439459516,
+    "test_class_ratio": 0.004802744425385935
+  },
+  "metrics": {
+    "accuracy": 0.9986,
+    "precision": 0.7778,
+    "recall": 1.0,
+    "f1_score": 0.875,
+    "macro_f1": 0.9372,
+    "weighted_f1": 0.9987,
+    "roc_auc": 1.0,
+    "false_positive_rate": 0.0014,
+    "confusion_matrix": {
+      "true_negatives": 2897,
+      "false_positives": 4,
+      "false_negatives": 0,
+      "true_positives": 14
+    },
+    "per_class": {
+      "Benign": {
+        "precision": 1.0,
+        "recall": 0.9986211651154774,
+        "f1-score": 0.9993101069334254,
+        "support": 2901.0
+      },
+      "Attack": {
+        "precision": 0.7777777777777778,
+        "recall": 1.0,
+        "f1-score": 0.875,
+        "support": 14.0
+      },
+      "accuracy": 0.9986277873070326,
+      "macro avg": {
+        "precision": 0.8888888888888888,
+        "recall": 0.9993105825577386,
+        "f1-score": 0.9371550534667127,
+        "support": 2915.0
+      },
+      "weighted avg": {
+        "precision": 0.9989327234610252,
+        "recall": 0.9986277873070326,
+        "f1-score": 0.9987130772603318,
+        "support": 2915.0
+      }
+    }
+  }
+}

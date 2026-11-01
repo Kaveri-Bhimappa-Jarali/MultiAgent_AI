@@ -68,7 +68,7 @@ class CorrelationAgent(BaseAgent):
             # Check if matching open incident exists for this pivot key
             existing_inc = None
             for inc in self.db.query(Incident).filter(Incident.status.in_(["NEW", "INVESTIGATING"])).all():
-                if pivot_key in (inc.affected_users + inc.affected_hosts + inc.affected_ips):
+                if pivot_key in ((inc.affected_users or []) + (inc.affected_hosts or []) + (inc.affected_ips or [])):
                     existing_inc = inc
                     break
 

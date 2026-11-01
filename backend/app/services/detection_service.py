@@ -127,6 +127,36 @@ DEFAULT_RULES = [
             "command_indicators": ["delete shadows", "resize shadowstorage", "wbadmin delete catalog"]
         },
         "enabled": True
+    },
+    {
+        "rule_id": "RULE-ANOM-001",
+        "name": "Isolation Forest Multivariate Anomaly",
+        "description": "Unsupervised machine learning model identifying statistical outliers across port, time, and severity vectors.",
+        "category": "Anomaly",
+        "severity": "HIGH",
+        "mitre_technique": "T1046",
+        "threshold": 1,
+        "time_window_seconds": 30,
+        "conditions": {
+            "model_type": "IsolationForest",
+            "score_threshold": 68.0
+        },
+        "enabled": True
+    },
+    {
+        "rule_id": "RULE-ML-001",
+        "name": "Supervised Flow Intrusion Detection (Random Forest)",
+        "description": "Supervised machine learning classifier trained on benchmark cybersecurity datasets (UNSW-NB15 / CICIDS2017) detecting malicious intrusion flows.",
+        "category": "Machine Learning",
+        "severity": "HIGH",
+        "mitre_technique": "T1071",
+        "threshold": 1,
+        "time_window_seconds": 30,
+        "conditions": {
+            "model_type": "RandomForestClassifier",
+            "probability_threshold": 0.60
+        },
+        "enabled": True
     }
 ]
 
@@ -685,6 +715,40 @@ def evaluate_event_with_rolling_window(db: Session, evt: SecurityEvent) -> List[
             findings.append(finding)
     except Exception as e:
         print(f"Error during ML anomaly scoring: {e}")
+
+    # 9. Supervised Random Forest Intrusion Classifier on network flow events
+    try:
+        from app.services.dataset_pipeline import extract_flow_features_from_event, run_realtime_flow_inference
+        flow_features = extract_flow_features_from_event(evt)
+        if flow_features and len(flow_features) > 0:
+            ml_res = run_realtime_flow_inference(flow_features)
+            if ml_res.get("ml_evaluated") and ml_res.get("is_malicious") and ml_res.get("attack_probability", 0) >= 0.50:
+                if not is_finding_duplicated("RULE-ML-001", evt.event_id, window_seconds=30):
+                    finding = DetectionFinding(
+                        finding_id=f"FIND-{uuid.uuid4().hex[:8].upper()}",
+                        rule_id="RULE-ML-001",
+                        rule_name="Supervised Flow Intrusion Detection (Random Forest)",
+                        detection_method="SUPERVISED_ML",
+                        severity=ml_res.get("assigned_severity", "HIGH"),
+                        confidence=ml_res.get("confidence", 0.90),
+                        explanation=ml_res.get("explanation", "Supervised ML classifier flagged network intrusion flow."),
+                        evidence={
+                            "event_ids": [evt.event_id],
+                            "model_version": ml_res.get("model_version"),
+                            "dataset_name": ml_res.get("dataset_name"),
+                            "attack_probability": ml_res.get("attack_probability"),
+                            "features_evaluated": ml_res.get("features_evaluated"),
+                            "flow_indicators": {k: flow_features[k] for k in list(flow_features.keys())[:8]},
+                            "mitre_technique": "T1071"
+                        },
+                        next_step=f"Inspect perimeter flow logs for source {evt.source_ip} and isolate target host {evt.host}.",
+                        timestamp=datetime.now(timezone.utc)
+                    )
+                    db.add(finding)
+                    findings.append(finding)
+    except Exception as e:
+        print(f"Error during supervised ML flow scoring: {e}")
+
 
     db.commit()
     return findings

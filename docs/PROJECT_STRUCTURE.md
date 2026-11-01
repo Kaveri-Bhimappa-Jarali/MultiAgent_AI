@@ -4,6 +4,7 @@
 **Academic Specification:** SDMCET VII Sem CSE Major Project Synopsis (Sections 16–17)  
 **Authors:** Deepak, Isha U Prabhu, Ishank Kumar, Kaveri Jarali  
 **Faculty Guide:** Dr. Rani Shetty  
+**Updated:** 2026-11-01  
 
 ---
 
@@ -15,109 +16,100 @@ The repository adheres to a clean, modular, and production-grade SOC architectur
 MultiAgent_AI/
 ├── .venv/                         # Local Python 3.14 AMD64 Virtual Environment
 ├── artifacts/                     # Persisted Production ML Artifacts & Preprocessors
-│   ├── feature_schema.json        # 33-feature canonical schema for UNSW-NB15/CICIDS2017
+│   ├── models/                    # Versioned Model Store
+│   │   ├── v3.0-UNSW-NB15-RF100/  # Trained on authentic UNSW-NB15 (97.59% Acc)
+│   │   └── v3.0-CICIDS2017-RF100/ # Trained on authentic CICIDS2017 (99.86% Acc)
+│   ├── feature_schema.json        # 39-feature canonical schema
 │   ├── model_metadata.json        # Training metadata, hyperparameters, and held-out metrics
 │   ├── preprocessing_metadata.json# Training medians and feature order dictionary
-│   ├── preprocessing_metadata.pkl # Binary metadata for inference-time imputation
 │   ├── supervised_rf_model.joblib # 100-tree Random Forest classifier artifact
-│   └── supervised_scaler.joblib   # RobustScaler fitted strictly on training data
+│   ├── supervised_scaler.joblib   # RobustScaler fitted strictly on training data
+│   └── supervised_medians.pkl     # Feature median imputation dictionary
 │
 ├── backend/                       # Enterprise FastAPI & SQLAlchemy SOC Engine
 │   ├── app/
 │   │   ├── agents/                # 10 Specialized Autonomous SOC Agents
 │   │   │   ├── orchestrator.py    # MultiAgentSOCEngine (Pipeline coordinator)
-│   │   │   ├── network_agent.py   # Agent 1: Network Intrusion & Flow Detection
+│   │   │   ├── network_agent.py   # Agent 1: Network Intrusion & Supervised Flow Detection
 │   │   │   ├── auth_agent.py      # Agent 2: Authentication & Credential Abuse
 │   │   │   ├── endpoint_agent.py  # Agent 3: Endpoint & Host Process Monitoring
 │   │   │   ├── anomaly_agent.py   # Agent 4: Multivariate Isolation Forest Anomaly Detection
-│   │   │   ├── malicious_behavior_agent.py # Agent 5: Living-off-the-Land & Behavioral Patterns
-│   │   │   ├── threat_intel_agent.py       # Agent 6: Threat Intelligence & IOC Enrichment
-│   │   │   ├── correlation_agent.py        # Agent 7: Graph & Sliding-Window Event Correlation
-│   │   │   ├── attack_path_agent.py        # Agent 8: Dynamic Entity Graph & Lateral Movement
-│   │   │   ├── investigation_agent.py      # Agent 9: 8-Question Root Cause Analysis (RCA)
+│   │   │   ├── behaviour_agent.py # Agent 5: Living-off-the-Land & Behavioral Patterns
+│   │   │   ├── threat_intel_agent.py # Agent 6: Threat Intelligence & IOC Enrichment
+│   │   │   ├── correlation_agent.py  # Agent 7: Graph & Sliding-Window Event Correlation
+│   │   │   ├── attack_path_agent.py  # Agent 8: Dynamic Entity Graph & Lateral Movement
+│   │   │   ├── investigation_agent.py # Agent 9: 8-Question Root Cause Analysis (RCA)
 │   │   │   └── response_agent.py  # Agent 10: SOAR Automated Containment Formulation
-│   │   ├── api/                   # REST Endpoints (/events, /incidents, /ml, /telemetry, /lab)
+│   │   ├── api/                   # REST Endpoints (/events, /incidents, /ml, /telemetry, /lab, /ws)
 │   │   ├── config.py              # Central configuration, DB URLs, thresholds
-│   │   ├── data/                  # Runtime model storage mirror & reference datasets
-│   │   │   ├── event_isolation_forest.joblib # 7-feature SIEM event anomaly detector
-│   │   │   ├── event_scaler.joblib           # RobustScaler for SIEM event features
-│   │   │   ├── supervised_rf_model.joblib    # Flow classifier
-│   │   │   ├── supervised_scaler.joblib      # Flow scaler
-│   │   │   ├── unsw_nb15_reference.csv       # Calibrated UNSW-NB15 dataset (3,000+ rows)
-│   │   │   └── cicids2017_reference.csv      # Calibrated CICIDS2017 dataset (3,000+ rows)
+│   │   ├── data/                  # Runtime model storage mirror & schemas
 │   │   ├── database.py            # SQLite engine with WAL mode and foreign key constraints
-│   │   ├── models/                # SQLAlchemy ORM Data Models (Event, Finding, Incident, VM)
+│   │   ├── models/                # SQLAlchemy ORM Models (Event, Finding, Incident, VM, Response)
 │   │   ├── schemas/               # Pydantic validation schemas
 │   │   └── services/              # Business logic (Ingestion, Risk, Verification, ML Pipeline)
+│   │       ├── collectors/        # Telemetry Ingress Collectors
+│   │       │   ├── base_collector.py
+│   │       │   ├── collector_manager.py
+│   │       │   ├── file_watcher_collector.py
+│   │       │   ├── live_demo_stream_collector.py
+│   │       │   ├── network_flow_sniffer.py
+│   │       │   └── syslog_collector.py
 │   │       ├── dataset_pipeline.py# Real training, leak-safe split, evaluation, and inference
-│   │       ├── anomaly_model.py   # Event-level Isolation Forest scoring engine
-│   │       ├── risk_engine.py     # Deterministic 0-100 incident risk scoring algorithm
+│   │       ├── detection_service.py # 12 MITRE ATT&CK rules + RULE-ML-001 + RULE-ANOM-001
+│   │       ├── risk_service.py    # Deterministic 0-100 incident risk scoring algorithm
+│   │       ├── response_service.py# SOAR execution, approval gates, and rollback
 │   │       └── verification_service.py # Evidence-based post-containment verification
 │   └── tests/                     # Automated Backend Test Suite (16/16 Passed)
 │       ├── test_realtime_pipeline.py
 │       ├── test_soc_core.py
 │       └── test_virtual_lab.py
 │
-├── data/                          # Data Storage Directory
-│   ├── processed/                 # Cleaned datasets generated by clean_dataset.py
-│   ├── raw/                       # Raw cybersecurity benchmark CSVs
-│   └── schemas/                   # Feature definitions and type annotations
+├── data/                          # Dataset Store & Schemas
+│   ├── raw/                       # Authentic Downloaded Datasets
+│   │   ├── unsw_nb15/             # UNSW_NB15_training-set.csv (14.59 MB, 82,332 records)
+│   │   └── cicids2017/            # Friday-WorkingHours-Afternoon-PortScan (73.34 MB)
+│   └── schemas/                   # Official Feature Definitions
+│       ├── unsw_nb15_schema.json  # 39 features + types + descriptions
+│       └── cicids2017_schema.json # 20 canonical features + types + descriptions
 │
-├── docs/                          # Comprehensive Technical & Audit Documentation
-│   ├── DATA_AND_MODEL_FLOW.md     # End-to-end data lifecycle and inference pipeline
-│   ├── DATASET_AND_TRAINING_AUDIT.md # UNSW-NB15 & CICIDS2017 audit & metrics
-│   ├── END_TO_END_TEST_REPORT.md  # Reproducible test evidence across all 16+ test cases
-│   ├── MODEL_AND_ALGORITHM_AUDIT.md  # Cross-questioning of all 9 synopsis models
-│   ├── PROJECT_STRUCTURE.md       # Logical filesystem layout (this document)
-│   ├── REFERENCE_PROJECT_GAP_ANALYSIS.md # Audit vs Isha's reference repository
-│   └── SYNOPSIS_COMPLIANCE_MATRIX.md # Mapping of 12 synopsis objectives to code
+├── frontend/                      # Enterprise React 18 / TypeScript Web Dashboard
+│   ├── src/                       # Components, Views, WebSocket hooks, State
+│   └── dist/                      # Production Vite Build (Compiled clean in 21.26s)
 │
-├── frontend/                      # React 18 + Vite SOC Analyst Dashboard
-│   ├── src/
-│   │   ├── components/            # Incident Queue, Investigation View, Attack Path Canvas
-│   │   ├── context/               # WebSocket Real-Time Alert Stream Context
-│   │   └── services/              # API Client (Axios)
-│   └── package.json
-│
-├── ml/                            # Machine Learning Engineering & Preprocessing Pipeline
+├── ml/                            # Machine Learning Preprocessing & Training
 │   ├── preprocessing/
-│   │   ├── clean_dataset.py       # Repeated header removal, NaN imputation, float casting
-│   │   └── build_preprocessing_metadata.py # Training feature order & median dictionary
-│   ├── training/
-│   │   └── train_model.py         # 3-way split, class-balanced Random Forest, held-out eval
-│   ├── explainability/
-│   │   └── feature_importance.py  # Gini MDI importance extraction, CSV & Pillow PNG chart
-│   └── evaluation/
-│       └── evaluate_models.py     # Confusion matrix, ROC-AUC, FPR held-out evaluation
+│   │   ├── acquire_datasets.py    # Dataset downloader with schema validation
+│   │   └── pipeline.py            # Leak-free splitting, RobustScaler, and feature selection
+│   └── training/
+│       └── train_model.py         # Versioned training script for RF models
 │
-├── reports/                       # Generated Audit Summaries & Visualizations
-│   ├── feature_importance.csv     # Ranked feature importances
-│   ├── feature_importance_top20.png # Visual bar chart of top 20 discriminative features
-│   └── unsw_nb15_training_summary.json # Complete evaluation metrics and test distributions
+├── reports/                       # Visual Confusion Matrices & Feature Importance Charts
+│   ├── unsw_nb15_confusion_matrix.png
+│   ├── unsw_nb15_feature_importance_top15.png
+│   ├── cicids2017_confusion_matrix.png
+│   └── cicids2017_feature_importance_top15.png
 │
-├── scripts/                       # Operational & Verification Scripts
-│   ├── replay/
-│   │   └── event_replay.py        # Continuous telemetry playback with throughput & latency
-│   ├── download_exact_wheels.py   # Resilient curl-based wheel downloader for Python 3.14
-│   └── final_acceptance_audit.py  # 8-stage evidence-based acceptance audit runner
+├── scripts/                       # Operational & Acceptance Verification Scripts
+│   ├── download_datasets.py
+│   ├── final_acceptance_audit.py
+│   ├── phase10_acceptance_verification.py
+│   ├── verify_dynamic_unknown_telemetry.py
+│   └── verify_frontend_backend_integration.py
 │
-└── virtual-lab/                   # Virtualized Multi-Node Testbed Scaffold
-    ├── Vagrantfile                # 3-node guest configuration (Gateway, DMZ-Web, Internal-DB)
-    ├── run_local_virtual_nodes.py # Verifiable multi-process local guest agent runner
-    └── guests/                    # Telemetry collectors and iptables mock daemons
+├── virtual-lab/                   # Isolated 3-Node Virtual Enterprise Lab
+│   ├── Vagrantfile                # Automated 3-VM host-only provisioning (192.168.56.0/24)
+│   ├── guest-agent/               # VM telemetry collector daemon with offline buffer
+│   ├── attacker/                  # Attacker scenario toolkit bounded to lab subnet
+│   └── run_local_virtual_nodes.py # Local multi-process daemon runner fallback
+│
+└── docs/                          # Comprehensive Technical Documentation
+    ├── FINAL_SYNOPSIS_COMPLIANCE_REPORT.md
+    ├── FINAL_REALTIME_ACCEPTANCE_REPORT.md
+    ├── DATASET_AND_TRAINING_AUDIT.md
+    ├── VM_LAB_ACCEPTANCE_REPORT.md
+    ├── END_TO_END_TEST_REPORT.md
+    ├── GENUINE_VM_LAB_DEPLOYMENT_GUIDE.md
+    ├── MODEL_AND_ALGORITHM_AUDIT.md
+    ├── PROJECT_STRUCTURE.md
+    └── DATA_AND_MODEL_FLOW.md
 ```
-
----
-
-## 2. Directory Separation Responsibilities
-
-| Directory | Responsibility | Primary Technologies |
-|---|---|---|
-| `backend/` | Hosts the core REST API, database session lifecycle, 10 specialized agents, and detection engines. | FastAPI, SQLAlchemy, SQLite (WAL) |
-| `frontend/` | Analyst UI providing real-time incident visualization, risk score gauges, and attack paths. | React, Vite, TailwindCSS, WebSockets |
-| `data/` | Isolates raw and processed flow datasets away from source code. | CSV, Parquet |
-| `ml/` | Independent machine learning workflows for cleaning, training, feature ranking, and evaluation. | Scikit-learn, Pandas, NumPy, Pillow |
-| `artifacts/` | Stores versioned model weights, scalers, and metadata required for reproducible inference. | Joblib, JSON |
-| `scripts/` | Tooling for dataset replay, automated acceptance testing, and wheel bootstrapping. | Python |
-| `virtual-lab/` | Multi-node guest topology definitions and verifiable agent collectors. | Vagrant, Python daemons |
-| `docs/` | Formal academic and technical documentation proving synopsis compliance. | Markdown |

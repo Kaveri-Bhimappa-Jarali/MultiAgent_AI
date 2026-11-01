@@ -1,0 +1,71 @@
+{
+  "model_version": "v3.0-UNSW-NB15-RF100",
+  "dataset_name": "UNSW-NB15",
+  "model_type": "Random Forest",
+  "training_timestamp": "2026-11-01T09:05:51.840181+00:00",
+  "random_seed": 42,
+  "hyperparameters": {
+    "n_estimators": 100,
+    "max_depth": 14,
+    "min_samples_split": 4,
+    "class_weight": "balanced"
+  },
+  "dataset_provenance": {
+    "source_file": "C:\\Users\\kaver\\MultiAgent_AI\\data\\raw\\unsw_nb15\\UNSW_NB15_training-set.csv",
+    "file_size_mb": 14.59,
+    "sha256_hash_prefix": "eaab8db413fc1f2a",
+    "official_citation": "Moustafa & Slay (2015), UNSW-NB15 dataset, MilCIS IEEE.",
+    "total_records_loaded": 15000,
+    "sampled": true
+  },
+  "split_summary": {
+    "train_samples": 7156,
+    "val_samples": 1652,
+    "test_samples": 2203,
+    "train_class_ratio": 0.451369480156512,
+    "test_class_ratio": 0.45120290512936906
+  },
+  "metrics": {
+    "accuracy": 0.9759,
+    "precision": 0.9537,
+    "recall": 0.995,
+    "f1_score": 0.9739,
+    "macro_f1": 0.9758,
+    "weighted_f1": 0.976,
+    "roc_auc": 0.9973,
+    "false_positive_rate": 0.0397,
+    "confusion_matrix": {
+      "true_negatives": 1161,
+      "false_positives": 48,
+      "false_negatives": 5,
+      "true_positives": 989
+    },
+    "per_class": {
+      "Benign": {
+        "precision": 0.9957118353344768,
+        "recall": 0.9602977667493796,
+        "f1-score": 0.9776842105263158,
+        "support": 1209.0
+      },
+      "Attack": {
+        "precision": 0.9537126325940212,
+        "recall": 0.9949698189134809,
+        "f1-score": 0.9739044805514525,
+        "support": 994.0
+      },
+      "accuracy": 0.9759418974126192,
+      "macro avg": {
+        "precision": 0.974712233964249,
+        "recall": 0.9776337928314303,
+        "f1-score": 0.9757943455388842,
+        "support": 2203.0
+      },
+      "weighted avg": {
+        "precision": 0.9767616730448657,
+        "recall": 0.9759418974126192,
+        "f1-score": 0.9759787853810529,
+        "support": 2203.0
+      }
+    }
+  }
+}

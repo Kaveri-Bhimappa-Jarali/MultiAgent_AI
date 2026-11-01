@@ -1,0 +1,36 @@
+{
+  "dataset_name": "UNSW-NB15",
+  "citation": "Moustafa, Nour, and Jill Slay. 'UNSW-NB15: a comprehensive data set for network intrusion detection systems (UNSW-NB15 network data set).' 2015 Military Communications and Information Systems Conference (MilCIS). IEEE, 2015.",
+  "official_sources": [
+    "https://research.unsw.edu.au/projects/unsw-nb15-dataset",
+    "https://ieee-dataport.org/documents/unsw-nb15-dataset"
+  ],
+  "target_column": "label",
+  "category_column": "attack_cat",
+  "label_mapping": {
+    "0": "Benign / Normal",
+    "1": "Attack"
+  },
+  "attack_categories": [
+    "Normal",
+    "Fuzzers",
+    "Analysis",
+    "Backdoors",
+    "DoS",
+    "Exploits",
+    "Generic",
+    "Reconnaissance",
+    "Shellcode",
+    "Worms"
+  ],
+  "feature_columns": [
+    "dur", "spkts", "dpkts", "sbytes", "dbytes", "rate", "sttl", "dttl",
+    "sload", "dload", "sloss", "dloss", "sinpkt", "dinpkt", "sjit", "djit",
+    "swin", "stcpb", "dtcpb", "dwin", "tcprtt", "synack", "ackdat", "smean",
+    "dmean", "ct_srv_src", "ct_state_ttl", "ct_dst_ltm", "ct_src_dport_ltm",
+    "ct_dst_sport_ltm", "ct_dst_src_ltm", "ct_src_ltm", "ct_srv_dst"
+  ],
+  "identifier_columns_to_exclude": [
+    "id", "srcip", "sport", "dstip", "dsport", "proto", "state", "service"
+  ]
+}

@@ -147,6 +147,11 @@ class MultiAgentSOCEngine:
         if event.source_ip and not any(event.source_ip.startswith(p) for p in ["127.", "10.", "192.168."]):
             domain_agents.append(ThreatIntelligenceAgent)
 
+        # 4. Malicious Behaviour agent if multi-stage or composite pattern observed
+        all_types = {e.event_type for e in (recent_events or [event])}
+        if len(all_types) >= 2 and any(t in all_types for t in ["privilege_escalation", "file_access", "process_execution"]):
+            domain_agents.append(MaliciousBehaviourAgent)
+
         # Execute selected domain agents
         for AgentCls in domain_agents:
             agent = AgentCls(self.db)

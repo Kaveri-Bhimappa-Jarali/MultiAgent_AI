@@ -1,0 +1,76 @@
+{
+  "dataset_name": "CICIDS2017",
+  "citation": "Sharafaldin, Iman, Arash Habibi Lashkari, and Ali A. Ghorbani. 'Toward generating a new intrusion detection dataset and intrusion traffic characterization.' ICISSP, 2018.",
+  "official_sources": [
+    "https://www.unb.ca/cic/datasets/ids-2017.html"
+  ],
+  "target_column": "Label",
+  "label_mapping": {
+    "BENIGN": 0,
+    "ATTACK": 1
+  },
+  "attack_categories": [
+    "BENIGN",
+    "PortScan",
+    "DDoS",
+    "Bot",
+    "Infiltration",
+    "Web Attack – Brute Force",
+    "Web Attack – XSS",
+    "Web Attack – Sql Injection",
+    "FTP-Patator",
+    "SSH-Patator",
+    "DoS slowloris",
+    "DoS Slowhttptest",
+    "DoS Hulk",
+    "DoS GoldenEye",
+    "Heartbleed"
+  ],
+  "canonical_features": [
+    "flow_duration",
+    "total_fwd_packets",
+    "total_bwd_packets",
+    "fwd_packet_length_mean",
+    "bwd_packet_length_mean",
+    "flow_iat_mean",
+    "flow_iat_std",
+    "flow_bytes_s",
+    "flow_packets_s",
+    "fwd_packets_s",
+    "bwd_packets_s",
+    "packet_length_mean",
+    "packet_length_std",
+    "fin_flag_count",
+    "syn_flag_count",
+    "rst_flag_count",
+    "psh_flag_count",
+    "ack_flag_count",
+    "urg_flag_count",
+    "average_packet_size"
+  ],
+  "raw_column_synonyms": {
+    " Flow Duration": "flow_duration",
+    " Total Fwd Packets": "total_fwd_packets",
+    " Total Backward Packets": "total_bwd_packets",
+    " Fwd Packet Length Mean": "fwd_packet_length_mean",
+    " Bwd Packet Length Mean": "bwd_packet_length_mean",
+    " Flow IAT Mean": "flow_iat_mean",
+    " Flow IAT Std": "flow_iat_std",
+    "Flow Bytes/s": "flow_bytes_s",
+    " Flow Packets/s": "flow_packets_s",
+    "Fwd Packets/s": "fwd_packets_s",
+    " Bwd Packets/s": "bwd_packets_s",
+    " Packet Length Mean": "packet_length_mean",
+    " Packet Length Std": "packet_length_std",
+    "FIN Flag Count": "fin_flag_count",
+    " SYN Flag Count": "syn_flag_count",
+    " RST Flag Count": "rst_flag_count",
+    " PSH Flag Count": "psh_flag_count",
+    " ACK Flag Count": "ack_flag_count",
+    " URG Flag Count": "urg_flag_count",
+    " Average Packet Size": "average_packet_size"
+  },
+  "identifier_columns_to_exclude": [
+    "Flow ID", " Source IP", " Source Port", " Destination IP", " Destination Port", " Protocol", " Timestamp"
+  ]
+}

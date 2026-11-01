@@ -13,6 +13,16 @@ from app.services.vm_service import (
     record_vm_action_result
 )
 
+
+def verify_vm_auth(db: Session, vm_id: str, x_vm_key: Optional[str] = None, body_key: Optional[str] = None) -> VMNode:
+    node = db.query(VMNode).filter(VMNode.vm_id == vm_id).first()
+    if not node:
+        raise HTTPException(status_code=404, detail=f"VM node '{vm_id}' not found")
+    key = x_vm_key or body_key
+    if key and key != node.api_key:
+        raise HTTPException(status_code=401, detail="Invalid VM authentication token (X-VM-Key)")
+    return node
+
 router = APIRouter(prefix="/vm", tags=["Virtual Enterprise Lab"])
 
 @router.get("/nodes")
@@ -28,6 +38,7 @@ def list_vm_nodes(db: Session = Depends(get_db)):
 @router.post("/heartbeat")
 def vm_heartbeat(
     payload: Dict[str, Any] = Body(...),
+    x_vm_key: Optional[str] = Header(None, alias="X-VM-Key"),
     db: Session = Depends(get_db)
 ):
     """
@@ -36,6 +47,8 @@ def vm_heartbeat(
     vm_id = payload.get("vm_id")
     if not vm_id:
         raise HTTPException(status_code=400, detail="vm_id is required")
+
+    verify_vm_auth(db, vm_id, x_vm_key, payload.get("api_key"))
 
     node = record_vm_heartbeat(
         db=db,
@@ -57,6 +70,7 @@ def vm_heartbeat(
 @router.post("/telemetry")
 def submit_vm_telemetry(
     payload: Dict[str, Any] = Body(...),
+    x_vm_key: Optional[str] = Header(None, alias="X-VM-Key"),
     db: Session = Depends(get_db)
 ):
     """
@@ -68,6 +82,8 @@ def submit_vm_telemetry(
     if not vm_id or not isinstance(events, list):
         raise HTTPException(status_code=400, detail="vm_id and events array are required")
 
+    verify_vm_auth(db, vm_id, x_vm_key, payload.get("api_key"))
+
     res = ingest_vm_telemetry(db, vm_id, events)
     return {
         "status": "INGESTED",
@@ -77,11 +93,13 @@ def submit_vm_telemetry(
 @router.get("/actions/pending")
 def poll_pending_actions(
     vm_id: str,
+    x_vm_key: Optional[str] = Header(None, alias="X-VM-Key"),
     db: Session = Depends(get_db)
 ):
     """
     Polled by VM guest daemons to retrieve pending SOAR containment actions (e.g. iptables drop).
     """
+    verify_vm_auth(db, vm_id, x_vm_key)
     actions = get_pending_vm_actions(db, vm_id)
     return {
         "vm_id": vm_id,
