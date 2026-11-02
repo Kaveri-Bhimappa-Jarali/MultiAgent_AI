@@ -30,6 +30,7 @@ interface NavSection {
     label: string;
     icon: React.ComponentType<{ className?: string }>;
     description?: string;
+    badge?: string;
   }>;
 }
 
@@ -56,7 +57,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
       title: 'INVESTIGATE',
       items: [
         { to: '/detections', label: 'Threat Detections', icon: AlertTriangle, description: 'Alert Findings' },
-        { to: '/agents', label: 'Multi-Agent SOC', icon: Bot, description: '10 AI Agents' },
+        { to: '/agents', label: 'Multi-Agent SOC', icon: Bot, description: '10 AI Agents', badge: '10' },
         { to: '/incidents', label: 'Incidents & RCA', icon: ShieldAlert, description: 'Incident Investigation' },
         { to: '/intelligence', label: 'Threat Intelligence', icon: Crosshair, description: 'CTI Indicators' }
       ]
@@ -87,44 +88,75 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
 
   return (
     <aside
-      className={`fixed top-0 left-0 z-40 h-screen transition-all duration-300 bg-navy-900 border-r border-navy-700/80 flex flex-col ${
+      className={`fixed top-0 left-0 z-40 h-screen transition-all duration-300 flex flex-col ${
         collapsed ? 'w-20' : 'w-64'
       }`}
+      style={{
+        background: 'linear-gradient(180deg, #070B16 0%, #0B1020 60%, #070B16 100%)',
+        borderRight: '1px solid rgba(109,90,230,0.15)',
+        boxShadow: '4px 0 24px rgba(0,0,0,0.5)'
+      }}
     >
       {/* Brand Header */}
-      <div className="h-16 flex items-center justify-between px-4 border-b border-navy-700/80 bg-navy-950/70 flex-shrink-0">
+      <div
+        className="h-16 flex items-center justify-between px-4 flex-shrink-0"
+        style={{ borderBottom: '1px solid rgba(109,90,230,0.15)', background: 'rgba(7,11,22,0.9)' }}
+      >
         <div className="flex items-center space-x-3 overflow-hidden">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-royal to-purple-800 flex items-center justify-center shadow-lg shadow-royal/20 flex-shrink-0">
-            <ShieldAlert className="w-6 h-6 text-gold" />
+          <div
+            className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{
+              background: 'linear-gradient(135deg, #6D5AE6, #8B73FF)',
+              boxShadow: '0 0 20px rgba(109,90,230,0.5), inset 0 1px 0 rgba(255,255,255,0.15)'
+            }}
+          >
+            <ShieldAlert className="w-5 h-5 text-white" />
           </div>
           {!collapsed && (
             <div className="flex flex-col truncate">
-              <span className="font-bold text-sm text-softwhite tracking-wide font-sans">ROYAL SOC</span>
-              <span className="text-[10px] text-gold tracking-widest font-mono uppercase">Multi-Agent AI</span>
+              <span className="font-bold text-sm text-white tracking-wide">ROYAL SOC</span>
+              <span
+                className="text-[10px] tracking-widest font-mono uppercase"
+                style={{ color: '#D8B875' }}
+              >
+                Multi-Agent AI
+              </span>
             </div>
           )}
         </div>
         <button
           onClick={onToggle}
-          className="p-1.5 rounded-lg text-mutedslate hover:text-softwhite hover:bg-navy-800 transition"
+          className="p-1.5 rounded-lg transition-all duration-200"
+          style={{ color: '#94A3B8' }}
+          onMouseEnter={e => {
+            (e.currentTarget as HTMLElement).style.color = '#F5F7FC';
+            (e.currentTarget as HTMLElement).style.background = 'rgba(109,90,230,0.15)';
+          }}
+          onMouseLeave={e => {
+            (e.currentTarget as HTMLElement).style.color = '#94A3B8';
+            (e.currentTarget as HTMLElement).style.background = 'transparent';
+          }}
           title={collapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
         >
           {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
         </button>
       </div>
 
-      {/* Nav List grouped by category */}
-      <div className="flex-1 overflow-y-auto py-3 px-3 space-y-4">
+      {/* Nav List */}
+      <div className="flex-1 overflow-y-auto py-3 px-2 space-y-1">
         {navSections.map((section) => (
-          <div key={section.title} className="space-y-1">
+          <div key={section.title} className="space-y-0.5">
             {!collapsed ? (
-              <div className="px-3 pt-1 pb-1">
-                <span className="text-[10px] font-mono tracking-wider font-semibold text-slate-500 uppercase">
+              <div className="px-3 pt-3 pb-1">
+                <span
+                  className="text-[10px] font-mono tracking-widest font-semibold uppercase"
+                  style={{ color: 'rgba(148,163,184,0.5)' }}
+                >
                   {section.title}
                 </span>
               </div>
             ) : (
-              <div className="h-px bg-navy-800 my-2 mx-2" />
+              <div className="h-px mx-2 my-2" style={{ background: 'rgba(109,90,230,0.12)' }} />
             )}
 
             {section.items.map((item) => {
@@ -140,15 +172,65 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
                 <NavLink
                   key={item.label}
                   to={item.to}
-                  className={`flex items-center space-x-3 px-3 py-2 rounded-xl font-medium text-xs transition-all duration-150 ${
+                  className="flex items-center space-x-3 px-3 py-2.5 rounded-xl font-medium text-xs transition-all duration-150 relative group"
+                  style={
                     isCurrent
-                      ? 'bg-royal/20 text-softwhite border border-royal/40 shadow-sm shadow-royal/10 font-semibold'
-                      : 'text-mutedslate hover:text-softwhite hover:bg-navy-800/80'
-                  } ${collapsed ? 'justify-center px-0' : ''}`}
+                      ? {
+                          background: 'linear-gradient(135deg, rgba(109,90,230,0.25), rgba(109,90,230,0.1))',
+                          color: '#F5F7FC',
+                          border: '1px solid rgba(109,90,230,0.4)',
+                          boxShadow: '0 0 12px rgba(109,90,230,0.2), inset 0 1px 0 rgba(255,255,255,0.06)',
+                          fontWeight: 600
+                        }
+                      : {
+                          color: 'rgba(148,163,184,0.85)',
+                          border: '1px solid transparent'
+                        }
+                  }
+                  onMouseEnter={e => {
+                    if (!isCurrent) {
+                      (e.currentTarget as HTMLElement).style.color = '#F5F7FC';
+                      (e.currentTarget as HTMLElement).style.background = 'rgba(109,90,230,0.08)';
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    if (!isCurrent) {
+                      (e.currentTarget as HTMLElement).style.color = 'rgba(148,163,184,0.85)';
+                      (e.currentTarget as HTMLElement).style.background = 'transparent';
+                    }
+                  }}
                   title={collapsed ? `${section.title}: ${item.label}` : item.description}
                 >
-                  <Icon className="w-4 h-4 flex-shrink-0" />
-                  {!collapsed && <span className="truncate">{item.label}</span>}
+                  {/* Active left glow bar */}
+                  {isCurrent && (
+                    <span
+                      className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 rounded-full"
+                      style={{
+                        height: '60%',
+                        background: 'linear-gradient(180deg, #6D5AE6, #9B8DF2)',
+                        boxShadow: '0 0 8px rgba(109,90,230,0.8)'
+                      }}
+                    />
+                  )}
+
+                  <Icon
+                    className={`w-4 h-4 flex-shrink-0 ${isCurrent ? 'text-purple-400' : ''}`}
+                  />
+                  {!collapsed && (
+                    <span className="truncate flex-1">{item.label}</span>
+                  )}
+                  {!collapsed && item.badge && (
+                    <span
+                      className="text-[9px] font-mono px-1.5 py-0.5 rounded-full"
+                      style={{
+                        background: 'rgba(109,90,230,0.2)',
+                        color: '#9B8DF2',
+                        border: '1px solid rgba(109,90,230,0.35)'
+                      }}
+                    >
+                      {item.badge}
+                    </span>
+                  )}
                 </NavLink>
               );
             })}
@@ -157,18 +239,35 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
       </div>
 
       {/* Bottom Status */}
-      <div className="p-3 border-t border-navy-700/80 bg-navy-950/50 flex-shrink-0">
+      <div className="p-3 flex-shrink-0" style={{ borderTop: '1px solid rgba(109,90,230,0.12)' }}>
         {!collapsed ? (
-          <div className="p-2.5 rounded-xl bg-navy-800/80 border border-slate-800 flex items-center justify-between">
+          <div
+            className="p-2.5 rounded-xl flex items-center justify-between"
+            style={{
+              background: 'linear-gradient(135deg, rgba(45,190,133,0.1), rgba(17,26,46,0.8))',
+              border: '1px solid rgba(45,190,133,0.2)'
+            }}
+          >
             <div className="flex items-center space-x-2">
-              <span className="w-2 h-2 rounded-full bg-socsuccess animate-ping" />
+              <span
+                className="w-2 h-2 rounded-full animate-pulse"
+                style={{ background: '#2DBE85', boxShadow: '0 0 6px rgba(45,190,133,0.8)' }}
+              />
               <span className="text-xs text-softwhite font-mono">10 Agents Ready</span>
             </div>
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-royal/30 text-royal-200 font-mono">v1.0</span>
+            <span
+              className="text-[10px] px-1.5 py-0.5 rounded font-mono font-semibold"
+              style={{ background: 'rgba(109,90,230,0.25)', color: '#9B8DF2' }}
+            >
+              v1.0
+            </span>
           </div>
         ) : (
           <div className="flex justify-center" title="10 Autonomous Agents Ready">
-            <span className="w-2.5 h-2.5 rounded-full bg-socsuccess" />
+            <span
+              className="w-2.5 h-2.5 rounded-full"
+              style={{ background: '#2DBE85', boxShadow: '0 0 8px rgba(45,190,133,0.7)' }}
+            />
           </div>
         )}
       </div>
