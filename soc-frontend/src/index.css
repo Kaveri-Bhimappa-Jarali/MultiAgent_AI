@@ -1,0 +1,87 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; padding: 0; }
+  body {
+    background-color: #080b14;
+    color: #e2e8f0;
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #0d1117; }
+  ::-webkit-scrollbar-thumb { background: #1e2736; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #8b5cf6; }
+}
+
+@layer components {
+  .soc-card {
+    @apply bg-[#0d1117] border border-[#1e2736] rounded-2xl;
+  }
+  .soc-glow-purple {
+    box-shadow: 0 0 20px rgba(139,92,246,0.15);
+  }
+  .soc-glow-magenta {
+    box-shadow: 0 0 20px rgba(217,70,239,0.12);
+  }
+  .soc-badge-critical {
+    @apply bg-red-500/15 text-red-400 border border-red-500/30 px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+  .soc-badge-high {
+    @apply bg-orange-500/15 text-orange-400 border border-orange-500/30 px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+  .soc-badge-medium {
+    @apply bg-yellow-500/15 text-yellow-400 border border-yellow-500/30 px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+  .soc-badge-low {
+    @apply bg-blue-500/15 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+  .soc-badge-resolved {
+    @apply bg-green-500/15 text-green-400 border border-green-500/30 px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+  .soc-badge-monitoring {
+    @apply bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+  .nav-pill-active {
+    @apply bg-purple-600/30 border border-purple-500/40 text-purple-300;
+    box-shadow: 0 0 12px rgba(139,92,246,0.2), inset 0 0 12px rgba(139,92,246,0.05);
+  }
+  .nav-pill {
+    @apply text-slate-400 hover:text-slate-200 border border-transparent;
+  }
+  .icon-btn {
+    @apply w-8 h-8 flex items-center justify-center rounded-full bg-[#111827] border border-[#1e2736] text-slate-400 hover:text-slate-200 hover:border-purple-500/40 transition-all duration-200;
+  }
+}
+
+@layer utilities {
+  .gradient-text {
+    background: linear-gradient(135deg, #8b5cf6, #d946ef);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .bg-glow {
+    background:
+      radial-gradient(ellipse at 15% 0%, rgba(139,92,246,0.12) 0%, transparent 55%),
+      radial-gradient(ellipse at 85% 0%, rgba(217,70,239,0.08) 0%, transparent 45%),
+      #080b14;
+  }
+}
+
+/* Risk segment bar animation */
+@keyframes fillBar {
+  from { width: 0; }
+  to { width: var(--fill-w); }
+}
+.risk-fill { animation: fillBar 1s ease-out forwards; }
+
+/* Pulse dot */
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.3); }
+}
+.pulse-dot { animation: pulseDot 2s ease-in-out infinite; }
