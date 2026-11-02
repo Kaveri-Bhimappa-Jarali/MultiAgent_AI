@@ -270,7 +270,7 @@ export const AttackSimulation: React.FC = () => {
               </div>
               <div className="flex justify-between">
                 <span>Private IP (eth0):</span>
-                <span className="text-softwhite font-bold">{status?.attacker_vm?.private_ip || '10.0.0.15'}</span>
+                <span className="text-softwhite font-bold">{status?.attacker_vm?.private_ip || '10.0.0.13'}</span>
               </div>
               <div className="flex justify-between">
                 <span>SSH Port / Latency:</span>
@@ -674,7 +674,7 @@ export const AttackSimulation: React.FC = () => {
               </div>
               <div className="flex justify-between font-mono">
                 <span className="text-mutedslate">Origin Host:</span>
-                <span className="text-crimson font-bold">Attacker VM (45.74.156.31 / 10.0.0.15)</span>
+                <span className="text-crimson font-bold">Attacker VM ({status?.attacker_vm?.host || '45.74.156.31'} / {status?.attacker_vm?.private_ip || '10.0.0.13'})</span>
               </div>
               <div className="flex justify-between font-mono">
                 <span className="text-mutedslate">Private Target:</span>
