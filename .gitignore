@@ -17,9 +17,15 @@ test_audit_db*.db
 .pytest_cache/
 
 # Node
+node_modules/
+dist/
+.vite/
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+soc-frontend/node_modules/
+soc-frontend/dist/
+soc-frontend/.vite/
 
 # OS & Environment
 .env
