@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { PageHeader } from '../components/common/PageHeader';
 import { api } from '../api/client';
 import { useWebSocket } from '../context/WebSocketContext';
 import { StatusBadge } from '../components/common/StatusBadge';
@@ -112,21 +113,14 @@ export const VirtualLab: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-navy-700/80 gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-softwhite flex items-center space-x-2">
-            <span>VIRTUAL ENTERPRISE NETWORK LAB</span>
-            <span className="text-xs px-2.5 py-0.5 rounded-full bg-gold/20 text-gold border border-gold/30 font-mono">
-              ISOLATED SUBNET 192.168.56.0/24
-            </span>
-          </h1>
-          <p className="text-xs text-mutedslate mt-1 font-mono">
-            Multi-system virtualization testbed: Attacker VM, Endpoint Workstation VM, Internal Server VM, and SOC Host.
-          </p>
-        </div>
-
-        <div className="flex items-center space-x-3">
+      {/* Beginner-Friendly Page Header */}
+      <PageHeader
+        title="Virtual Enterprise Lab"
+        badge="Simulated Subnet 192.168.56.0/24"
+        badgeVariant="gold"
+        description="Multi-system testbed: Attacker VM, Endpoint Workstation VM, Internal Server VM running as local daemons simulating Linux guest telemetry without allocating 6+ GB of RAM."
+        terms={['Security Event', 'SOAR']}
+        actions={
           <button
             onClick={fetchLabState}
             className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-navy-800 border border-slate-700 text-mutedslate hover:text-softwhite text-xs font-mono transition"
@@ -134,8 +128,8 @@ export const VirtualLab: React.FC = () => {
             <RefreshCw className="w-3.5 h-3.5" />
             <span>Sync Lab State</span>
           </button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Navigation Tabs */}
       <div className="flex space-x-2 border-b border-navy-700 pb-2 text-xs font-mono">

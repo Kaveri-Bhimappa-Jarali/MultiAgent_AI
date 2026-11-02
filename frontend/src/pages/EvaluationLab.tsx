@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { PageHeader } from '../components/common/PageHeader';
 import { api } from '../api/client';
 import { EvaluationRun } from '../types';
 import { Database, Play, BarChart2, TrendingUp, CheckCircle, RefreshCw } from 'lucide-react';
@@ -62,18 +63,14 @@ export const EvaluationLab: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="pb-4 border-b border-navy-700/80">
-        <h1 className="text-2xl font-bold tracking-tight text-softwhite flex items-center space-x-2">
-          <span>HISTORICAL DATASET LAB & ML BENCHMARK EVALUATION</span>
-          <span className="text-xs px-2.5 py-0.5 rounded-full bg-royal/20 text-royal-200 border border-royal/30 font-mono">
-            EMPIRICAL VALIDATION
-          </span>
-        </h1>
-        <p className="text-xs text-mutedslate mt-1 font-mono">
-          Train and evaluate supervised detection models on standard cybersecurity datasets (UNSW-NB15, CICIDS2017) with strict train/test isolation.
-        </p>
-      </div>
+      {/* Beginner-Friendly Page Header */}
+      <PageHeader
+        title="Historical Dataset & ML Evaluation Lab"
+        badge="Empirical Validation"
+        badgeVariant="royal"
+        description="Train and evaluate supervised detection models on standard cybersecurity datasets (UNSW-NB15, CICIDS2017) with strict train/test isolation."
+        terms={['Detection', 'Risk Score']}
+      />
 
       {/* Control Benchmarking Panel */}
       <div className="p-6 rounded-2xl bg-navy-800 border border-slate-800 shadow-xl space-y-4">

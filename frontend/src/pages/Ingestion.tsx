@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { PageHeader } from '../components/common/PageHeader';
 import { api } from '../api/client';
 import { Layers, UploadCloud, CheckCircle2, AlertCircle, FileText, Send, Sparkles } from 'lucide-react';
 
@@ -108,18 +109,14 @@ export const Ingestion: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="pb-4 border-b border-navy-700/80">
-        <h1 className="text-2xl font-bold tracking-tight text-softwhite flex items-center space-x-2">
-          <span>SECURITY DATA INGESTION PIPELINE</span>
-          <span className="text-xs px-2.5 py-0.5 rounded-full bg-royal/20 text-royal-200 border border-royal/30 font-mono">
-            CANONICAL PARSER
-          </span>
-        </h1>
-        <p className="text-xs text-mutedslate mt-1 font-mono">
-          Ingest, validate and normalize raw telemetry logs with automatic deduplication and detection triggering.
-        </p>
-      </div>
+      {/* Beginner-Friendly Page Header */}
+      <PageHeader
+        title="Data Ingestion Pipeline"
+        badge="Canonical Parser"
+        badgeVariant="royal"
+        description="Manually ingest individual security events or import JSON batches to test validation, normalization, and immediate threat detection triggering."
+        terms={['Security Event', 'Detection']}
+      />
 
       {/* Result / Error Notification */}
       {result && (

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { PageHeader } from '../components/common/PageHeader';
 import { api } from '../api/client';
 import { AgentStatus, AgentExecution, AgentFinding } from '../types';
 import { StatusBadge } from '../components/common/StatusBadge';
@@ -92,21 +93,14 @@ export const Agents: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-navy-700/80 gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-softwhite flex items-center space-x-2">
-            <span>MULTI-AGENT AI SOC ENGINE MONITOR</span>
-            <span className="text-xs px-2.5 py-0.5 rounded-full bg-royal/20 text-royal-200 border border-royal/30 font-mono">
-              10 SPECIALIZED AGENTS
-            </span>
-          </h1>
-          <p className="text-xs text-mutedslate mt-1 font-mono">
-            Orchestration, telemetry execution and cooperative reasoning state across all autonomous security agents.
-          </p>
-        </div>
-
-        <div className="flex items-center space-x-3">
+      {/* Beginner-Friendly Page Header */}
+      <PageHeader
+        title="Multi-Agent SOC Engine"
+        badge="10 Autonomous AI Agents"
+        badgeVariant="royal"
+        description="Orchestration, telemetry execution and cooperative reasoning state across all 10 specialized autonomous security agents."
+        terms={['AI Agent', 'Detection', 'Incident']}
+        actions={
           <button
             onClick={handleRunAll}
             disabled={runningAll}
@@ -115,8 +109,8 @@ export const Agents: React.FC = () => {
             <Play className={`w-3.5 h-3.5 fill-current ${runningAll ? 'animate-spin' : ''}`} />
             <span>{runningAll ? 'Executing 10-Agent Pipeline...' : 'Run All 10 Agents Now'}</span>
           </button>
-        </div>
-      </div>
+        }
+      />
 
       {/* 10 Agents Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">

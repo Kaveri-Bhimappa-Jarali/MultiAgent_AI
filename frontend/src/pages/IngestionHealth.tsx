@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { PageHeader } from '../components/common/PageHeader';
 import { api } from '../api/client';
 import { useWebSocket } from '../context/WebSocketContext';
 import { StatusBadge } from '../components/common/StatusBadge';
@@ -89,44 +90,47 @@ export const IngestionHealth: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-navy-700/80 gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-softwhite flex items-center space-x-2">
-            <span>REAL-TIME INGESTION & PIPELINE HEALTH MONITOR</span>
-            <span className="text-xs px-2.5 py-0.5 rounded-full bg-royal/20 text-royal-200 border border-royal/30 font-mono">
-              STREAM TELEMETRY
-            </span>
-          </h1>
-          <p className="text-xs text-mutedslate mt-1 font-mono">
-            Live queue depth, adapter connectivity, measured processing latencies, and operational freshness monitors.
-          </p>
-        </div>
+      {/* Beginner-Friendly Page Header */}
+      <PageHeader
+        title="Ingestion & Pipeline Health"
+        badge="Stream Telemetry"
+        badgeVariant="emerald"
+        description="Check real-time health of telemetry collectors, queue workers, processing latency, and WebSocket client streams."
+        workflowStep={{
+          stepNumber: 1,
+          totalSteps: 6,
+          stepName: 'Check System Health',
+          nextRoute: '/events',
+          nextLabel: 'Monitor Events (Step 2)'
+        }}
+        terms={['Security Event', 'Detection']}
+        actions={
+          <>
+            <div className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-navy-800 border border-slate-700 text-xs font-mono">
+              {wsStatus === 'CONNECTED' ? (
+                <>
+                  <Wifi className="w-4 h-4 text-socsuccess animate-pulse" />
+                  <span className="text-socsuccess font-bold">WEBSOCKET: LIVE</span>
+                </>
+              ) : (
+                <>
+                  <WifiOff className="w-4 h-4 text-socwarning" />
+                  <span className="text-socwarning font-bold">WEBSOCKET: OFFLINE</span>
+                </>
+              )}
+            </div>
 
-        <div className="flex items-center space-x-3">
-          <div className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-navy-800 border border-slate-700 text-xs font-mono">
-            {wsStatus === 'CONNECTED' ? (
-              <>
-                <Wifi className="w-4 h-4 text-socsuccess animate-pulse" />
-                <span className="text-socsuccess font-bold">WEBSOCKET: LIVE</span>
-              </>
-            ) : (
-              <>
-                <WifiOff className="w-4 h-4 text-socwarning" />
-                <span className="text-socwarning font-bold">WS: {wsStatus}</span>
-              </>
-            )}
-          </div>
-
-          <button
-            onClick={fetchHealth}
-            className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-navy-800 border border-slate-700 text-mutedslate hover:text-softwhite text-xs font-mono transition"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>Sync</span>
-          </button>
-        </div>
-      </div>
+            <button
+              onClick={fetchHealth}
+              disabled={loading}
+              className="flex items-center space-x-2 px-3.5 py-1.5 rounded-xl bg-navy-800 border border-slate-700 text-mutedslate hover:text-softwhite text-xs font-mono transition"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+              <span>Refresh</span>
+            </button>
+          </>
+        }
+      />
 
       {/* Freshness Warnings Banner */}
       {warnings.length > 0 && (

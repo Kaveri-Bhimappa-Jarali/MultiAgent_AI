@@ -35,6 +35,28 @@ class AgentHealthCard(BaseModel):
     last_run: Optional[str] = None
     findings_count: int = 0
 
+class AttentionItem(BaseModel):
+    id: str
+    category: str
+    title: str
+    description: str
+    severity: str
+    action_label: str
+    action_url: str
+    timestamp: str
+
+class SystemHealthComponent(BaseModel):
+    name: str
+    status: str
+    details: str
+    is_simulated: bool = False
+
+class AgentSummary(BaseModel):
+    total: int
+    available: int
+    investigating: int
+    error_count: int
+
 class DashboardSummaryResponse(BaseModel):
     metrics: MetricSummary
     event_trends: List[TrendPoint]
@@ -44,3 +66,6 @@ class DashboardSummaryResponse(BaseModel):
     recent_critical_incidents: List[Dict[str, Any]]
     recent_events: List[Dict[str, Any]]
     system_status: Dict[str, Any]
+    attention_items: Optional[List[AttentionItem]] = None
+    system_health_components: Optional[Dict[str, SystemHealthComponent]] = None
+    agent_summary: Optional[AgentSummary] = None

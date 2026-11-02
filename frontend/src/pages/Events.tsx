@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { PageHeader } from '../components/common/PageHeader';
 import { api } from '../api/client';
 import { SecurityEvent } from '../types';
 import { SeverityBadge } from '../components/common/SeverityBadge';
@@ -92,50 +93,53 @@ export const Events: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-navy-700/80 gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-softwhite flex items-center space-x-2">
-            <span>REAL-TIME SECURITY EVENT EXPLORER</span>
-            <span className="text-xs px-2.5 py-0.5 rounded-full bg-royal/20 text-royal-200 border border-royal/30 font-mono">
-              SIEM STORAGE
-            </span>
-          </h1>
-          <p className="text-xs text-mutedslate mt-1 font-mono">
-            Filter, search and investigate normalized security events across network, identity and endpoint activity.
-          </p>
-        </div>
+      {/* Beginner-Friendly Page Header */}
+      <PageHeader
+        title="Security Events"
+        badge="SIEM Storage"
+        badgeVariant="royal"
+        description="Inspect incoming security logs collected from endpoints, authentication services, and network traffic. Use search and filters to find specific events."
+        workflowStep={{
+          stepNumber: 2,
+          totalSteps: 6,
+          stepName: 'Monitor Incoming Events',
+          nextRoute: '/detections',
+          nextLabel: 'Review Detections (Step 3)'
+        }}
+        terms={['Security Event', 'Severity']}
+        actions={
+          <>
+            <div
+              className={`flex items-center space-x-2 px-3 py-1.5 rounded-xl border text-xs font-mono transition ${
+                wsStatus === 'CONNECTED'
+                  ? 'bg-emerald-500/15 border-socsuccess text-socsuccess'
+                  : 'bg-navy-800 border-slate-700 text-socwarning'
+              }`}
+            >
+              <Radio className={`w-3.5 h-3.5 ${wsStatus === 'CONNECTED' ? 'animate-pulse' : ''}`} />
+              <span>{wsStatus === 'CONNECTED' ? 'LIVE STREAM: ON' : `STREAM: ${wsStatus}`}</span>
+            </div>
 
-        <div className="flex items-center space-x-3">
-          {/* Live Streaming Badge */}
-          <div
-            className={`flex items-center space-x-2 px-3 py-1.5 rounded-xl border text-xs font-mono transition ${
-              wsStatus === 'CONNECTED'
-                ? 'bg-emerald-500/15 border-socsuccess text-socsuccess'
-                : 'bg-navy-800 border-slate-700 text-socwarning'
-            }`}
-          >
-            <Radio className={`w-3.5 h-3.5 ${wsStatus === 'CONNECTED' ? 'animate-pulse' : ''}`} />
-            <span>{wsStatus === 'CONNECTED' ? 'LIVE EVENT STREAM: ON' : `STREAM: ${wsStatus}`}</span>
-          </div>
+            <button
+              onClick={fetchEvents}
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-navy-800 border border-slate-700 text-mutedslate hover:text-softwhite text-xs font-mono transition"
+              title="Refresh events"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Refresh</span>
+            </button>
 
-          <button
-            onClick={fetchEvents}
-            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-navy-800 border border-slate-700 text-mutedslate hover:text-softwhite text-xs font-mono transition"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>Refresh</span>
-          </button>
-
-          <button
-            onClick={handleExportCSV}
-            className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-navy-800 border border-slate-700 text-mutedslate hover:text-softwhite text-xs font-mono transition"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>Export CSV</span>
-          </button>
-        </div>
-      </div>
+            <button
+              onClick={handleExportCSV}
+              className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-navy-800 border border-slate-700 text-mutedslate hover:text-softwhite text-xs font-mono transition"
+              title="Download CSV report"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Export CSV</span>
+            </button>
+          </>
+        }
+      />
 
       {/* Search & Filter Bar */}
       <div className="p-4 rounded-xl bg-navy-800 border border-slate-800 flex flex-col md:flex-row items-center gap-3">

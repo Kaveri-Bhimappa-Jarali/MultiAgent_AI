@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { PageHeader } from '../components/common/PageHeader';
 import { api } from '../api/client';
 import { DetectionRule, DetectionFinding } from '../types';
 import { SeverityBadge } from '../components/common/SeverityBadge';
@@ -75,21 +76,21 @@ export const Detections: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-navy-700/80 gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-softwhite flex items-center space-x-2">
-            <span>THREAT DETECTION ENGINE & RULE MANAGER</span>
-            <span className="text-xs px-2.5 py-0.5 rounded-full bg-royal/20 text-royal-200 border border-royal/30 font-mono">
-              MITRE ATT&CK ALIGNED
-            </span>
-          </h1>
-          <p className="text-xs text-mutedslate mt-1 font-mono">
-            Manage deterministic behavioral signatures, ML anomaly thresholds and inspect active detection findings.
-          </p>
-        </div>
-
-        <div className="flex items-center space-x-3">
+      {/* Beginner-Friendly Page Header */}
+      <PageHeader
+        title="Threat Detections"
+        badge="MITRE ATT&CK Aligned"
+        badgeVariant="royal"
+        description="Review security flags and anomalies detected by signature rules and Machine Learning models. Enable or disable rules and evaluate backlogged events."
+        workflowStep={{
+          stepNumber: 3,
+          totalSteps: 6,
+          stepName: 'Review Detected Threats',
+          nextRoute: '/incidents',
+          nextLabel: 'Investigate Incidents (Step 4)'
+        }}
+        terms={['Detection', 'MITRE ATT&CK', 'Severity']}
+        actions={
           <button
             onClick={handleRunEvaluation}
             disabled={evaluating}
@@ -98,8 +99,8 @@ export const Detections: React.FC = () => {
             <Play className={`w-3.5 h-3.5 fill-current ${evaluating ? 'animate-spin' : ''}`} />
             <span>{evaluating ? 'Evaluating...' : 'Evaluate Rules on Backlog'}</span>
           </button>
-        </div>
-      </div>
+        }
+      />
 
       {evalResult && (
         <div className="p-3.5 rounded-xl bg-royal/15 border border-royal/40 text-xs font-mono text-royal-100 flex items-center space-x-2.5">

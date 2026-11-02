@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { PageHeader } from '../components/common/PageHeader';
 import { api } from '../api/client';
 import { ThreatIndicator, ThreatLookupResult } from '../types';
 import { SeverityBadge } from '../components/common/SeverityBadge';
@@ -47,18 +48,14 @@ export const ThreatIntel: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="pb-4 border-b border-navy-700/80">
-        <h1 className="text-2xl font-bold tracking-tight text-softwhite flex items-center space-x-2">
-          <span>CYBER THREAT INTELLIGENCE (CTI) HUB</span>
-          <span className="text-xs px-2.5 py-0.5 rounded-full bg-royal/20 text-royal-200 border border-royal/30 font-mono">
-            INDICATOR ENRICHMENT
-          </span>
-        </h1>
-        <p className="text-xs text-mutedslate mt-1 font-mono">
-          Query IP addresses, domains and hashes against curated threat actor indicators, botnets and C2 infrastructure.
-        </p>
-      </div>
+      {/* Beginner-Friendly Page Header */}
+      <PageHeader
+        title="Threat Intelligence (CTI)"
+        badge="Indicator Enrichment"
+        badgeVariant="royal"
+        description="Query IP addresses, domains and hashes against curated threat actor indicators, botnets and command-and-control infrastructure."
+        terms={['MITRE ATT&CK', 'Detection']}
+      />
 
       {/* Indicator Lookup Search */}
       <div className="p-6 rounded-2xl bg-navy-800 border border-slate-800 shadow-xl space-y-4">
