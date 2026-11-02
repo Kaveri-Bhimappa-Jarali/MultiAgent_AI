@@ -10,6 +10,7 @@ from app.models.audit import AuditLog
 from app.models.dataset import EvaluationRun
 from app.models.collector import CollectorConfig
 from app.models.vm_node import VMNode, VMAction
+from app.models.simulation import AttackSimulationExecution
 
 __all__ = [
     "User",
@@ -31,4 +32,5 @@ __all__ = [
     "CollectorConfig",
     "VMNode",
     "VMAction",
+    "AttackSimulationExecution",
 ]

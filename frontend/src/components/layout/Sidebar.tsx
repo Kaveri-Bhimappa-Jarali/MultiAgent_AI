@@ -36,6 +36,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
     { to: '/intelligence', label: 'Threat Intel (CTI)', icon: Crosshair },
     { to: '/evaluation', label: 'Historical Lab', icon: Database },
     { to: '/virtual-lab', label: 'Virtual Enterprise Lab', icon: Network },
+    { to: '/simulation', label: 'Attack Simulation', icon: Crosshair },
     { to: '/demo', label: 'Demo Attack Lab', icon: FlaskConical },
     { to: '/reports', label: 'SOC Reports', icon: FileText },
     { to: '/settings', label: 'Policies & Audits', icon: Settings },

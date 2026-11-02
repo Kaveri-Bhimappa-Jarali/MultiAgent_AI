@@ -309,15 +309,17 @@ class VMGuestCollector:
         sanitized_line = re.sub(r"(password[=:\s]+)\S+", r"\1[REDACTED]", line, flags=re.IGNORECASE)
         now = datetime.now(timezone.utc).isoformat()
 
-        # Failed SSH Login
-        if "failed password" in line.lower() or "authentication failure" in line.lower():
+        # Failed SSH Login / Invalid User Attempts
+        if "failed password" in line.lower() or "authentication failure" in line.lower() or "invalid user" in line.lower():
+            if "connection closed by invalid user" in line.lower():
+                return None
             ip_m = re.search(r"from\s+(\d+\.\d+\.\d+\.\d+)", line)
-            user_m = re.search(r"for\s+(?:invalid\s+user\s+)?([a-zA-Z0-9_\-\.]+)", line)
+            user_m = re.search(r"(?:for|user)\s+(?:invalid\s+user\s+)?([a-zA-Z0-9_\-\.]+)", line)
             port_m = re.search(r"port\s+(\d+)", line)
             return {
                 "event_type": "authentication",
                 "severity": "HIGH",
-                "source_ip": ip_m.group(1) if ip_m else "192.168.56.20",
+                "source_ip": ip_m.group(1) if ip_m else "10.0.0.15",
                 "destination_ip": self.local_ip,
                 "destination_port": 22,
                 "source_port": int(port_m.group(1)) if port_m else 49152,
@@ -337,7 +339,7 @@ class VMGuestCollector:
             return {
                 "event_type": "authentication",
                 "severity": "INFO",
-                "source_ip": ip_m.group(1) if ip_m else "192.168.56.20",
+                "source_ip": ip_m.group(1) if ip_m else "10.0.0.15",
                 "destination_ip": self.local_ip,
                 "destination_port": 22,
                 "username": user_m.group(1) if user_m else "ubuntu",
@@ -374,7 +376,7 @@ class VMGuestCollector:
             return {
                 "event_type": "network_connection",
                 "severity": "MEDIUM",
-                "source_ip": ip_m.group(1) if ip_m else "192.168.56.20",
+                "source_ip": ip_m.group(1) if ip_m else "10.0.0.15",
                 "destination_ip": self.local_ip,
                 "destination_port": int(port_m.group(1)) if port_m else 80,
                 "host": self.vm_id,
@@ -385,6 +387,115 @@ class VMGuestCollector:
             }
 
         return None
+
+    def monitor_nginx_logs(self):
+        target_log = "/var/log/nginx/access.log"
+        if not os.path.exists(target_log):
+            return
+        offset = os.path.getsize(target_log)
+        while self.is_running:
+            try:
+                if os.path.exists(target_log):
+                    cur_size = os.path.getsize(target_log)
+                    if cur_size < offset:
+                        offset = 0
+                    if cur_size > offset:
+                        with open(target_log, "r", encoding="utf-8", errors="replace") as f:
+                            f.seek(offset)
+                            new_data = f.read()
+                            offset = f.tell()
+                        events = []
+                        for line in new_data.splitlines():
+                            evt = self._parse_nginx_line(line)
+                            if evt:
+                                events.append(evt)
+                        if events:
+                            res = self._post("/api/vm/telemetry", {
+                                "vm_id": self.vm_id,
+                                "api_key": self.api_key,
+                                "events": events
+                            })
+                            if "error" not in res:
+                                self.events_sent += len(events)
+            except Exception as e:
+                pass
+            time.sleep(1.0)
+
+    def _parse_nginx_line(self, line: str) -> dict:
+        line = line.strip()
+        if not line:
+            return None
+        m = re.match(r'^(\d+\.\d+\.\d+\.\d+)\s+-\s+-\s+\[[^\]]+\]\s+"([A-Z]+)\s+([^\s]+)\s+HTTP/[0-9\.]+"\s+(\d+)\s+(\d+)', line)
+        if not m:
+            return None
+        src_ip, method, path, status_code, b_sent = m.groups()
+        code = int(status_code)
+        now = datetime.now(timezone.utc).isoformat()
+        is_probe = any(x in path.lower() for x in ["admin", ".env", "login", "config", "backup", "sql", "shell", "passwd"]) or code in [401, 403, 404]
+        return {
+            "event_type": "network_connection",
+            "severity": "HIGH" if is_probe else "LOW",
+            "source_ip": src_ip,
+            "destination_ip": self.local_ip,
+            "destination_port": 80,
+            "protocol": "TCP",
+            "host": self.vm_id,
+            "file_action": "WEB_PROBE" if is_probe else "WEB_REQUEST",
+            "command_line": f"Nginx {method} {path} HTTP/1.1 -> {code} ({b_sent} bytes)",
+            "collector_source": "nginx_access.log",
+            "timestamp": now,
+            "raw_payload": line
+        }
+
+    def monitor_network_connections(self):
+        """Monitors inbound connections via ss/netstat to capture port sweeps and active connections"""
+        seen_connections = set()
+        while self.is_running:
+            try:
+                # Read established or syn-received connections from 10.0.0.0/16
+                res = subprocess.run(
+                    ["ss", "-tuan", "state", "connected", "state", "syn-recv"],
+                    capture_output=True, text=True, timeout=3
+                )
+                if res.returncode == 0:
+                    events = []
+                    now = datetime.now(timezone.utc).isoformat()
+                    for l in res.stdout.splitlines()[1:]:
+                        parts = l.split()
+                        if len(parts) >= 5:
+                            peer = parts[4]
+                            if ":" in peer:
+                                p_ip, p_port = peer.rsplit(":", 1)
+                                if p_ip.startswith("10.0.") and p_ip != self.local_ip:
+                                    conn_key = (p_ip, p_port, int(time.time() // 5))
+                                    if conn_key not in seen_connections:
+                                        seen_connections.add(conn_key)
+                                        loc = parts[3].rsplit(":", 1)[-1] if ":" in parts[3] else "80"
+                                        events.append({
+                                            "event_type": "network_connection",
+                                            "severity": "MEDIUM",
+                                            "source_ip": p_ip,
+                                            "destination_ip": self.local_ip,
+                                            "destination_port": int(loc) if loc.isdigit() else 80,
+                                            "protocol": "TCP",
+                                            "host": self.vm_id,
+                                            "command_line": f"Inbound socket connection from {p_ip}:{p_port} -> port {loc}",
+                                            "collector_source": "socket_tracker",
+                                            "timestamp": now,
+                                            "raw_payload": l
+                                        })
+                    if events:
+                        self._post("/api/vm/telemetry", {
+                            "vm_id": self.vm_id,
+                            "api_key": self.api_key,
+                            "events": events
+                        })
+            except Exception:
+                pass
+            # Prune old keys
+            if len(seen_connections) > 500:
+                seen_connections.clear()
+            time.sleep(1.5)
 
     def start(self):
         print("=" * 65)
@@ -398,10 +509,14 @@ class VMGuestCollector:
         t_hb = threading.Thread(target=self.send_heartbeat, daemon=True)
         t_soar = threading.Thread(target=self.check_pending_soar_actions, daemon=True)
         t_log = threading.Thread(target=self.monitor_auth_logs, daemon=True)
+        t_nginx = threading.Thread(target=self.monitor_nginx_logs, daemon=True)
+        t_net = threading.Thread(target=self.monitor_network_connections, daemon=True)
 
         t_hb.start()
         t_soar.start()
         t_log.start()
+        t_nginx.start()
+        t_net.start()
 
         try:
             while self.is_running:

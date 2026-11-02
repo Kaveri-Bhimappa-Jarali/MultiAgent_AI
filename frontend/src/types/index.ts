@@ -303,3 +303,66 @@ export interface DashboardData {
   recent_events: Array<any>;
   system_status: Record<string, string>;
 }
+
+export interface SimulationScenario {
+  scenario_id: string;
+  category: string;
+  name: string;
+  description: string;
+  mitre_technique: string;
+  severity: string;
+  default_parameters: Record<string, any>;
+  parameter_schema: Record<string, any>;
+}
+
+export interface SimulationExecution {
+  execution_id: string;
+  scenario_category: string;
+  scenario_id: string;
+  scenario_name: string;
+  attacker_ip: string;
+  target_ip: string;
+  target_port?: number;
+  parameters: Record<string, any>;
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'STOPPED' | 'FAILED';
+  traffic_status: 'NOT_STARTED' | 'GENERATING' | 'GENERATED' | 'TERMINATED';
+  flow_status: 'PENDING' | 'CAPTURING' | 'CAPTURED';
+  ml_status: 'PENDING' | 'INFERRED' | 'DETECTED';
+  soc_alert_status: 'PENDING' | 'FINDINGS_RECORDED' | 'INCIDENT_CREATED' | 'NO_ALERT';
+  start_time?: string;
+  end_time?: string;
+  duration_seconds?: number;
+  exit_code?: number;
+  summary?: string;
+  raw_logs?: string;
+  metrics: Record<string, any>;
+  associated_event_ids: string[];
+  associated_finding_ids: string[];
+  associated_incident_id?: string;
+  error_message?: string;
+  created_at: string;
+}
+
+export interface VMNodeStatus {
+  name: string;
+  host: string;
+  private_ip: string;
+  user: string;
+  port: number;
+  is_reachable: boolean;
+  latency_ms?: number;
+  error?: string;
+}
+
+export interface SimulationConnectivityStatus {
+  attacker_vm: VMNodeStatus;
+  victim_vm: VMNodeStatus;
+  private_network_reachability: boolean;
+  private_latency_ms?: number;
+  tools_installed: Record<string, boolean>;
+  all_ready: boolean;
+  max_concurrent: number;
+  timeout_seconds: number;
+  allowed_targets: string[];
+  active_execution?: any;
+}

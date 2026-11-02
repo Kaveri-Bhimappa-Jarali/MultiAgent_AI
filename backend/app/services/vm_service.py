@@ -12,7 +12,7 @@ from app.schemas.event import SecurityEventCreate
 from app.services.ingestion_service import normalize_and_ingest_events
 from app.services.broadcaster import broadcaster
 from app.services.audit_service import log_audit_entry
-from app.services.time_utils import utc_isoformat
+from app.services.time_utils import utc_isoformat, ensure_utc
 
 DEFAULT_LAB_NODES = [
     {
@@ -300,7 +300,7 @@ def get_lab_nodes_status(db: Session) -> List[Dict[str, Any]]:
         # Compute fresh status
         display_status = n.status
         if n.last_heartbeat_at:
-            diff = (now - n.last_heartbeat_at).total_seconds()
+            diff = (now - ensure_utc(n.last_heartbeat_at)).total_seconds()
             if diff > 60 and n.status != "ISOLATED":
                 display_status = "STALE"
             elif diff > 300 and n.status != "ISOLATED":

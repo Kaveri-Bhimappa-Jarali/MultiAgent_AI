@@ -30,9 +30,29 @@ class Settings(BaseSettings):
     # SOC Engine
     DEMO_MODE_DEFAULT: bool = True
     DEFAULT_RISK_THRESHOLD_AUTO_CONTAIN: int = 85
-    
+
+    # Attacker VM
+    ATTACKER_VM_HOST: str = "45.74.156.31"
+    ATTACKER_VM_PRIVATE_IP: str = "10.0.0.13"
+    ATTACKER_VM_USER: str = "ubuntu"
+    ATTACKER_VM_SSH_PORT: int = 22
+    ATTACKER_VM_SSH_KEY_PATH: str = ""
+
+    # Victim VM
+    VICTIM_VM_HOST: str = "45.74.156.69"
+    VICTIM_VM_PRIVATE_IP: str = "10.0.0.14"
+    VICTIM_VM_USER: str = "ubuntu"
+    VICTIM_VM_SSH_PORT: int = 22
+    VICTIM_VM_INTERFACE: str = "eth0"
+
+    # Attack Simulation Configuration
+    ATTACK_SIMULATION_ENABLED: bool = True
+    ATTACK_SIMULATION_MAX_CONCURRENT: int = 1
+    ATTACK_SIMULATION_TIMEOUT: int = 300
+    ATTACK_SIMULATION_ALLOWED_TARGETS: str = "10.0.0.14"
+
     class Config:
-        env_file = ".env"
+        env_file = (".env", "backend/.env")
         extra = "allow"
 
 settings = Settings()

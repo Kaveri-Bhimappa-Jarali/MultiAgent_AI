@@ -4,14 +4,17 @@ import { Incident } from '../types';
 import { SeverityBadge } from '../components/common/SeverityBadge';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { useNavigate } from 'react-router-dom';
-import { ShieldAlert, ArrowRight, RefreshCw, Filter, Users, Laptop, Zap } from 'lucide-react';
+import { ShieldAlert, ArrowRight, RefreshCw, Filter, Users, Laptop, Zap, Radio } from 'lucide-react';
+import { useWebSocket } from '../context/WebSocketContext';
 
 export const Incidents: React.FC = () => {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
   const [severityFilter, setSeverityFilter] = useState('');
+  const [newCount, setNewCount] = useState(0);
   const navigate = useNavigate();
+  const { subscribe } = useWebSocket();
 
   const fetchIncidents = async () => {
     try {
@@ -30,7 +33,25 @@ export const Incidents: React.FC = () => {
 
   useEffect(() => {
     fetchIncidents();
+    // Fallback polling every 30s (WebSocket handles instant updates)
+    const interval = setInterval(fetchIncidents, 30000);
+    return () => clearInterval(interval);
   }, [statusFilter, severityFilter]);
+
+  // Live WebSocket — new incidents appear immediately
+  useEffect(() => {
+    const unsub = subscribe('INCIDENT_UPDATED', (inc: any) => {
+      setIncidents((prev) => {
+        const exists = prev.some((i) => i.incident_id === inc.incident_id);
+        if (exists) {
+          return prev.map((i) => (i.incident_id === inc.incident_id ? { ...i, ...inc } : i));
+        }
+        setNewCount((c) => c + 1);
+        return [inc, ...prev];
+      });
+    });
+    return unsub;
+  }, [subscribe]);
 
   return (
     <div className="space-y-6">
@@ -49,8 +70,17 @@ export const Incidents: React.FC = () => {
         </div>
 
         <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-1.5 text-[10px] font-mono text-emerald-400 px-2.5 py-1.5 rounded-lg bg-emerald-400/10 border border-emerald-400/20">
+            <Radio className="w-3 h-3 animate-pulse" />
+            <span>LIVE</span>
+            {newCount > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold animate-pulse">
+                +{newCount} new
+              </span>
+            )}
+          </div>
           <button
-            onClick={fetchIncidents}
+            onClick={() => { fetchIncidents(); setNewCount(0); }}
             className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-navy-800 border border-slate-700 text-mutedslate hover:text-softwhite text-xs font-mono transition"
           >
             <RefreshCw className="w-3.5 h-3.5" />

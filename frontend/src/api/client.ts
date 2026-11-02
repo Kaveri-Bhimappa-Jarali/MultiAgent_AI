@@ -164,5 +164,15 @@ export const api = {
   runVMScenario: (payload: { scenario: string; target_ip?: string }) =>
     request<any>('/vm/simulation/run', { method: 'POST', body: JSON.stringify(payload) }),
   createVMAction: (payload: any) =>
-    request<any>('/vm/actions/create', { method: 'POST', body: JSON.stringify(payload) })
+    request<any>('/vm/actions/create', { method: 'POST', body: JSON.stringify(payload) }),
+
+  // Attack Simulation Console
+  getSimulationStatus: () => request<any>('/simulation/status'),
+  getSimulationScenarios: () => request<any[]>('/simulation/scenarios'),
+  launchSimulation: (payload: { scenario_id: string; target_ip?: string; parameters?: Record<string, any> }) =>
+    request<any>('/simulation/launch', { method: 'POST', body: JSON.stringify(payload) }),
+  stopSimulation: (executionId: string, reason?: string) =>
+    request<any>(`/simulation/${executionId}/stop`, { method: 'POST', body: JSON.stringify({ reason: reason || 'User stop' }) }),
+  getSimulationExecutions: (limit = 50) => request<any[]>(`/simulation/executions?limit=${limit}`),
+  getSimulationExecution: (executionId: string) => request<any>(`/simulation/executions/${executionId}`)
 };

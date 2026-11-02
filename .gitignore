@@ -23,6 +23,7 @@ frontend/.vite/
 
 # OS & Environment
 .env
+.env.example
 .DS_Store
 Thumbs.db
 

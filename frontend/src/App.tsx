@@ -21,6 +21,7 @@ import { Reports } from './pages/Reports';
 import { Settings } from './pages/Settings';
 import { IngestionHealth } from './pages/IngestionHealth';
 import { VirtualLab } from './pages/VirtualLab';
+import { AttackSimulation } from './pages/AttackSimulation';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading } = useAuth();
@@ -74,6 +75,7 @@ export const App: React.FC = () => {
               <Route path="evaluation" element={<EvaluationLab />} />
               <Route path="demo" element={<DemoLab />} />
               <Route path="virtual-lab" element={<VirtualLab />} />
+              <Route path="simulation" element={<AttackSimulation />} />
               <Route path="reports" element={<Reports />} />
               <Route path="settings" element={<Settings />} />
             </Route>

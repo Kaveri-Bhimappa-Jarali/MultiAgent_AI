@@ -2,15 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
 import { DetectionRule, DetectionFinding } from '../types';
 import { SeverityBadge } from '../components/common/SeverityBadge';
-import { AlertTriangle, ShieldCheck, Play, RefreshCw, CheckCircle, Crosshair } from 'lucide-react';
+import { AlertTriangle, ShieldCheck, Play, RefreshCw, CheckCircle, Crosshair, Radio } from 'lucide-react';
+import { useWebSocket } from '../context/WebSocketContext';
 
 export const Detections: React.FC = () => {
-  const [tab, setTab] = useState<'rules' | 'findings'>('rules');
+  const [tab, setTab] = useState<'rules' | 'findings'>('findings');
   const [rules, setRules] = useState<DetectionRule[]>([]);
   const [findings, setFindings] = useState<DetectionFinding[]>([]);
   const [loading, setLoading] = useState(true);
   const [evaluating, setEvaluating] = useState(false);
   const [evalResult, setEvalResult] = useState<string | null>(null);
+  const [liveCount, setLiveCount] = useState(0);
+  const { subscribe } = useWebSocket();
 
   const fetchData = async () => {
     try {
@@ -31,6 +34,21 @@ export const Detections: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Live WebSocket subscription — new findings appear instantly
+  useEffect(() => {
+    const unsub = subscribe('DETECTION_TRIGGERED', (finding: any) => {
+      setFindings((prev) => {
+        // Prepend new finding, avoid duplicates
+        if (prev.some((f) => f.finding_id === finding.finding_id)) return prev;
+        return [finding, ...prev.slice(0, 199)];
+      });
+      setLiveCount((c) => c + 1);
+      // Auto-switch to findings tab when a new detection comes in
+      setTab('findings');
+    });
+    return unsub;
+  }, [subscribe]);
 
   const handleToggleRule = async (rule: DetectionRule) => {
     try {
@@ -103,15 +121,24 @@ export const Detections: React.FC = () => {
           Detection Rules ({rules.length})
         </button>
         <button
-          onClick={() => setTab('findings')}
-          className={`px-4 py-2 rounded-xl text-xs font-mono font-semibold transition ${
+          onClick={() => { setTab('findings'); setLiveCount(0); }}
+          className={`relative px-4 py-2 rounded-xl text-xs font-mono font-semibold transition ${
             tab === 'findings'
               ? 'bg-royal/20 text-softwhite border border-royal/40'
               : 'text-mutedslate hover:text-softwhite hover:bg-navy-800'
           }`}
         >
           Detection Findings ({findings.length})
+          {liveCount > 0 && tab !== 'findings' && (
+            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center animate-pulse">
+              {liveCount > 9 ? '9+' : liveCount}
+            </span>
+          )}
         </button>
+        <div className="ml-auto flex items-center space-x-1.5 text-[10px] font-mono text-emerald-400">
+          <Radio className="w-3 h-3 animate-pulse" />
+          <span>LIVE</span>
+        </div>
       </div>
 
       {/* Tab: Detection Rules */}

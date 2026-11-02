@@ -26,6 +26,7 @@ from app.api.demo import router as demo_router
 from app.api.settings import router as settings_router
 from app.api.health_monitor import router as health_monitor_router
 from app.api.virtual_lab import router as vm_router
+from app.api.simulation import router as simulation_router
 from app.services.vm_service import seed_default_vm_nodes
 from app.services.database_migrations import ensure_event_processed_at_column
 
@@ -89,6 +90,7 @@ app.include_router(demo_router, prefix=settings.API_V1_STR)
 app.include_router(settings_router, prefix=settings.API_V1_STR)
 app.include_router(health_monitor_router, prefix=settings.API_V1_STR)
 app.include_router(vm_router, prefix=settings.API_V1_STR)
+app.include_router(simulation_router, prefix=settings.API_V1_STR)
 
 # Global WebSocket endpoint at both /api/ws and /ws
 @app.websocket("/api/ws")
