@@ -212,6 +212,7 @@ export interface ResponseAction {
   approved_at?: string;
   execution_result?: Record<string, any>;
   executed_at?: string;
+  created_at?: string;
 }
 
 export interface VerificationResult {
