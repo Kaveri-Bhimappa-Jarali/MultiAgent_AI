@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     ATTACK_SIMULATION_ALLOWED_TARGETS: str = "10.0.0.14"
 
     class Config:
-        env_file = (".env", "backend/.env")
+        env_file = (".env", "backend/.env", "../.env")
         extra = "allow"
 
 settings = Settings()
