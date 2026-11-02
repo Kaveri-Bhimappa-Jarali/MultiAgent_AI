@@ -679,6 +679,31 @@ class SimulationService:
             exec_rec.associated_incident_id = recent_incident.incident_id
             exec_rec.soc_alert_status = "INCIDENT_CREATED"
 
+        # 4. Check for response action & LLM analysis
+        from app.models.response import ResponseAction
+        recent_action = None
+        if recent_incident:
+            recent_action = db.query(ResponseAction).filter(
+                ResponseAction.incident_id == recent_incident.incident_id
+            ).order_by(ResponseAction.id.desc()).first()
+
+        if not recent_action and matching_finding_ids:
+            recent_action = db.query(ResponseAction).filter(
+                ResponseAction.created_at >= start_t
+            ).order_by(ResponseAction.id.desc()).first()
+
+        metrics = dict(exec_rec.metrics or {})
+        if recent_action:
+            metrics["response_action"] = {
+                "action_id": recent_action.action_id,
+                "action_type": recent_action.action_type,
+                "target_value": recent_action.target_value,
+                "status": recent_action.status,
+                "requires_approval": recent_action.requires_approval,
+                "reason": recent_action.reason
+            }
+        exec_rec.metrics = metrics
+
         if not matching_finding_ids and not recent_incident:
             exec_rec.soc_alert_status = "NO_ALERT"
 

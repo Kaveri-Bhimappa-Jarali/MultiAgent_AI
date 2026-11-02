@@ -117,3 +117,101 @@ def verify_action(
 
     result = create_and_run_verification(db, action.action_id, action.incident_id)
     return VerificationResultResponse.model_validate(result)
+
+
+@router.post("/{action_id}/allow", response_model=ResponseActionResponse)
+def allow_action(
+    action_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Analyst Gate: Allows and executes the pending containment action."""
+    action = db.query(ResponseAction).filter(ResponseAction.action_id == action_id).first()
+    if not action:
+        raise HTTPException(status_code=404, detail="Response action not found")
+    
+    _require_soc_admin(current_user, db, action_id, "ALLOW_RESPONSE_ACTION")
+    
+    from datetime import datetime, timezone
+    action.status = "EXECUTED"
+    action.requires_approval = False
+    action.approved_by = current_user.username
+    action.approved_at = datetime.now(timezone.utc)
+    action.is_dry_run = False
+    action.execution_result = {
+        "status": "EXECUTED",
+        "authorized_by": current_user.username,
+        "authorized_at": datetime.now(timezone.utc).isoformat(),
+        "decision": "ALLOWED",
+        "action_type": action.action_type,
+        "target_value": action.target_value
+    }
+    db.commit()
+    db.refresh(action)
+
+    log_audit_entry(
+        db,
+        actor=current_user.username,
+        action="ALLOW_RESPONSE_ACTION",
+        target_type="RESPONSE_ACTION",
+        target_id=action_id,
+        details={"decision": "ALLOWED", "target": action.target_value}
+    )
+
+    from app.services.broadcaster import broadcaster
+    broadcaster.publish_sync("RESPONSE_ACTION_UPDATED", {
+        "action_id": action.action_id,
+        "status": "EXECUTED",
+        "decision": "ALLOWED",
+        "actor": current_user.username
+    })
+
+    return ResponseActionResponse.model_validate(action)
+
+
+@router.post("/{action_id}/deny", response_model=ResponseActionResponse)
+def deny_action(
+    action_id: str,
+    reason: str = Body("Analyst denied containment", embed=True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Analyst Gate: Denies and dismisses the containment action."""
+    action = db.query(ResponseAction).filter(ResponseAction.action_id == action_id).first()
+    if not action:
+        raise HTTPException(status_code=404, detail="Response action not found")
+    
+    _require_soc_admin(current_user, db, action_id, "DENY_RESPONSE_ACTION")
+    
+    from datetime import datetime, timezone
+    action.status = "DISMISSED"
+    action.requires_approval = False
+    action.execution_result = {
+        "status": "DISMISSED",
+        "denied_by": current_user.username,
+        "denied_at": datetime.now(timezone.utc).isoformat(),
+        "reason": reason,
+        "decision": "DENIED"
+    }
+    db.commit()
+    db.refresh(action)
+
+    log_audit_entry(
+        db,
+        actor=current_user.username,
+        action="DENY_RESPONSE_ACTION",
+        target_type="RESPONSE_ACTION",
+        target_id=action_id,
+        details={"decision": "DENIED", "reason": reason}
+    )
+
+    from app.services.broadcaster import broadcaster
+    broadcaster.publish_sync("RESPONSE_ACTION_UPDATED", {
+        "action_id": action.action_id,
+        "status": "DISMISSED",
+        "decision": "DENIED",
+        "actor": current_user.username
+    })
+
+    return ResponseActionResponse.model_validate(action)
+

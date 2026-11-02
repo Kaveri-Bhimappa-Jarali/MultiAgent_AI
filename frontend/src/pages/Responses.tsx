@@ -168,6 +168,57 @@ export const Responses: React.FC = () => {
                     <StatusBadge status={act.status} />
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
+                    {/* Autonomous Containment Indicator */}
+                    {act.approved_by?.includes('Autonomous') && (
+                      <span className="px-3 py-1 rounded-xl bg-purple-950/60 border border-purple-500/50 text-purple-300 font-mono text-[11px] font-bold flex items-center space-x-1 shadow-[0_0_12px_rgba(168,85,247,0.3)]">
+                        <Zap className="w-3.5 h-3.5 text-purple-400" />
+                        <span>⚡ Autonomous LLM Containment</span>
+                      </span>
+                    )}
+
+                    {/* Analyst Gate: ALLOW & DENY buttons for pending actions */}
+                    {['PENDING_APPROVAL', 'RECOMMENDED'].includes(act.status) && (
+                      <>
+                        <button
+                          onClick={async () => {
+                            try {
+                              setBusyAction(act.action_id);
+                              await api.allowResponse(act.action_id);
+                              await fetchData();
+                            } catch (err) {
+                              setError(errorMessage(err));
+                            } finally {
+                              setBusyAction(null);
+                            }
+                          }}
+                          disabled={busyAction !== null}
+                          className="px-3.5 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 hover:bg-emerald-500/30 transition flex items-center space-x-1.5 font-bold disabled:opacity-50 shadow-md shadow-emerald-500/10"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>ALLOW (Enforce)</span>
+                        </button>
+
+                        <button
+                          onClick={async () => {
+                            try {
+                              setBusyAction(act.action_id);
+                              await api.denyResponse(act.action_id, 'Analyst rejected response action');
+                              await fetchData();
+                            } catch (err) {
+                              setError(errorMessage(err));
+                            } finally {
+                              setBusyAction(null);
+                            }
+                          }}
+                          disabled={busyAction !== null}
+                          className="px-3.5 py-1.5 rounded-xl bg-rose-500/20 text-rose-300 border border-rose-500/50 hover:bg-rose-500/30 transition flex items-center space-x-1.5 font-bold disabled:opacity-50"
+                        >
+                          <AlertTriangle className="w-3.5 h-3.5" />
+                          <span>DENY (Dismiss)</span>
+                        </button>
+                      </>
+                    )}
+
                     {canSimulate && (
                       <button
                         onClick={() => void performAction(act.action_id, 'simulate')}
@@ -175,7 +226,7 @@ export const Responses: React.FC = () => {
                         className="px-3.5 py-1.5 rounded-xl bg-violet-500/20 text-violet-200 border border-violet-400/40 hover:bg-violet-500/30 transition flex items-center space-x-1.5 font-bold disabled:opacity-50"
                       >
                         <FlaskConical className="w-3.5 h-3.5" />
-                        <span>Dry Run / Simulate</span>
+                        <span>Dry Run</span>
                       </button>
                     )}
                     {canApprove && (
@@ -185,18 +236,18 @@ export const Responses: React.FC = () => {
                         className="px-3.5 py-1.5 rounded-xl bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/30 transition flex items-center space-x-1.5 font-bold disabled:opacity-50"
                       >
                         <Check className="w-3.5 h-3.5" />
-                        <span>Approve Action</span>
+                        <span>Approve</span>
                       </button>
                     )}
                     {canExecute && (
                       <button
                         onClick={() => void performAction(act.action_id, 'execute')}
                         disabled={busyAction !== null}
-                        title="Admin-only: dispatches to a matching registered lab guest and may execute a real command there."
+                        title="Dispatches to a matching registered lab guest and executes containment command."
                         className="px-3.5 py-1.5 rounded-xl bg-emerald-500/20 text-socsuccess border border-socsuccess/40 hover:bg-emerald-500/30 transition flex items-center space-x-1.5 font-bold disabled:opacity-50"
                       >
                         <Zap className="w-3.5 h-3.5" />
-                        <span>Dispatch to Lab Guest</span>
+                        <span>Dispatch to Guest</span>
                       </button>
                     )}
                     {canVerify && (

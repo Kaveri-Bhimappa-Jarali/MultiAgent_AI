@@ -27,7 +27,12 @@ import {
   Copy,
   ExternalLink,
   Zap,
-  Activity
+  Activity,
+  BrainCircuit,
+  Sparkles,
+  Check,
+  X,
+  ShieldCheck
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import {
@@ -55,6 +60,10 @@ export const AttackSimulation: React.FC = () => {
   const [targetIp, setTargetIp] = useState<string>('10.0.0.14');
   const [launching, setLaunching] = useState<boolean>(false);
   const [launchError, setLaunchError] = useState<string | null>(null);
+
+  // LLM Layer Analysis & Response Gate
+  const [latestLLMAnalysis, setLatestLLMAnalysis] = useState<any | null>(null);
+  const [actionBusy, setActionBusy] = useState<boolean>(false);
 
   // Inspect Past Logs Modal
   const [inspectExecution, setInspectExecution] = useState<SimulationExecution | null>(null);
@@ -130,13 +139,68 @@ export const AttackSimulation: React.FC = () => {
       setLiveLogs((prev) => [...prev, `[SYSTEM] 🛑 Simulation ${data.execution_id} STOPPED by operator.`]);
     });
 
+    const unsubLLM = subscribe('LLM_ANALYSIS_COMPLETED', (data: any) => {
+      if (data && data.analysis) {
+        setLatestLLMAnalysis(data.analysis);
+        setLiveLogs((prev) => [
+          ...prev,
+          `[SYSTEM] 🧠 LLM Analysis [${data.analysis.engine}]: ${data.analysis.verdict} (${Math.round((data.analysis.confidence || 0.9) * 100)}% Conf) — ${data.analysis.attack_type}`,
+          `[SYSTEM] ⚡ SOAR Policy Decision: ${data.analysis.action_taken || 'Evaluated'}`
+        ]);
+      }
+    });
+
+    const unsubAction = subscribe('RESPONSE_ACTION_UPDATED', (data: any) => {
+      if (latestLLMAnalysis) {
+        setLatestLLMAnalysis((prev: any) => prev ? { ...prev, response_status: data.status, action_decision: data.decision } : null);
+      }
+      setLiveLogs((prev) => [
+        ...prev,
+        `[SYSTEM] 🛡️ Response Action ${data.action_id} updated: ${data.status} (Decision: ${data.decision || 'Updated'}) by ${data.actor}`
+      ]);
+    });
+
     return () => {
       unsubStarted();
       unsubLog();
       unsubCompleted();
       unsubStopped();
+      unsubLLM();
+      unsubAction();
     };
-  }, [subscribe, fetchAll]);
+  }, [subscribe, fetchAll, latestLLMAnalysis]);
+
+  const handleAllowAction = async (actionId: string) => {
+    try {
+      setActionBusy(true);
+      await api.allowResponse(actionId);
+      if (latestLLMAnalysis) {
+        setLatestLLMAnalysis({ ...latestLLMAnalysis, response_status: 'EXECUTED', action_decision: 'ALLOWED' });
+      }
+      setLiveLogs((prev) => [...prev, `[SYSTEM] ✅ SOC Analyst ALLOWED & ENFORCED containment action ${actionId}. Defense rules dispatched!`]);
+      await fetchAll(true);
+    } catch (err: any) {
+      setLiveLogs((prev) => [...prev, `[SYSTEM] ❌ Error allowing response: ${err.message}`]);
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const handleDenyAction = async (actionId: string) => {
+    try {
+      setActionBusy(true);
+      await api.denyResponse(actionId, 'Analyst rejected action in Attack Simulation console');
+      if (latestLLMAnalysis) {
+        setLatestLLMAnalysis({ ...latestLLMAnalysis, response_status: 'DISMISSED', action_decision: 'DENIED' });
+      }
+      setLiveLogs((prev) => [...prev, `[SYSTEM] ⚠️ SOC Analyst DENIED containment action ${actionId}. Action dismissed.`]);
+      await fetchAll(true);
+    } catch (err: any) {
+      setLiveLogs((prev) => [...prev, `[SYSTEM] ❌ Error denying response: ${err.message}`]);
+    } finally {
+      setActionBusy(false);
+    }
+  };
 
   // Launch handler
   const handleOpenLaunch = (scenario: SimulationScenario) => {
@@ -459,6 +523,84 @@ export const AttackSimulation: React.FC = () => {
                   >
                     <ExternalLink className="w-3 h-3 ml-0.5" />
                   </Link>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Real-Time LLM Threat Reasoning & Containment Reaction Card */}
+        {latestLLMAnalysis && (
+          <div className="mb-4 p-4 rounded-xl bg-gradient-to-r from-purple-950/30 via-navy-950 to-indigo-950/30 border border-purple-500/40 shadow-xl space-y-3 font-mono text-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-purple-500/20">
+              <div className="flex items-center space-x-2">
+                <div className="p-1.5 rounded-lg bg-purple-500/20 border border-purple-500/40 text-purple-300">
+                  <BrainCircuit className="w-4 h-4" />
+                </div>
+                <span className="font-bold text-softwhite tracking-wide uppercase">
+                  LLM Threat Reasoning Layer ({latestLLMAnalysis.engine || 'Gemini-1.5-Flash'})
+                </span>
+                <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-bold">
+                  {latestLLMAnalysis.verdict}
+                </span>
+              </div>
+
+              <div className="flex items-center space-x-2 text-[11px]">
+                <span className="text-mutedslate">Confidence:</span>
+                <span className="text-gold font-bold">
+                  {Math.round((latestLLMAnalysis.confidence || 0.9) * 100)}%
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[11px]">
+              <div>
+                <span className="text-mutedslate text-[10px]">Attack Classification:</span>
+                <p className="text-softwhite font-bold mt-0.5">{latestLLMAnalysis.attack_type || 'Malicious Intrusion Pattern'}</p>
+                <p className="text-slate-300 mt-1 line-clamp-2">{latestLLMAnalysis.summary}</p>
+              </div>
+
+              <div className="p-3 rounded-lg bg-navy-900/80 border border-slate-800 space-y-2">
+                <div className="text-[10px] text-mutedslate uppercase font-semibold flex items-center justify-between">
+                  <span>SOAR Containment Decision</span>
+                  <span className="text-royal-300">{latestLLMAnalysis.action_type || 'BLOCK_IP'} → {latestLLMAnalysis.target_value || '10.0.0.13'}</span>
+                </div>
+
+                {latestLLMAnalysis.response_status === 'AUTONOMOUSLY_CONTAINED' || latestLLMAnalysis.response_status === 'EXECUTED' ? (
+                  <div className="p-2 rounded bg-emerald-950/40 border border-emerald-500/40 text-emerald-300 text-[11px] font-bold flex items-center space-x-1.5">
+                    <Zap className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                    <span>⚡ AUTONOMOUSLY ENFORCED: Severity is HIGH/CRITICAL (Confidence ≥ 90%). Threat neutralized automatically.</span>
+                  </div>
+                ) : latestLLMAnalysis.response_status === 'DISMISSED' ? (
+                  <div className="p-2 rounded bg-slate-800 text-slate-400 text-[11px] flex items-center space-x-1.5">
+                    <X className="w-4 h-4" />
+                    <span>Action was DENIED and dismissed by SOC Analyst.</span>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="text-amber-300 text-[11px]">
+                      ⏳ Requires Analyst Authorization (Severity/Confidence gated).
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => latestLLMAnalysis.action_id && handleAllowAction(latestLLMAnalysis.action_id)}
+                        disabled={actionBusy}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 hover:bg-emerald-500/30 transition font-bold flex items-center space-x-1 disabled:opacity-50"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>ALLOW (Enforce)</span>
+                      </button>
+
+                      <button
+                        onClick={() => latestLLMAnalysis.action_id && handleDenyAction(latestLLMAnalysis.action_id)}
+                        disabled={actionBusy}
+                        className="px-3 py-1.5 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/50 hover:bg-rose-500/30 transition font-bold flex items-center space-x-1 disabled:opacity-50"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        <span>DENY (Dismiss)</span>
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>

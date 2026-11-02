@@ -141,6 +141,39 @@ class CorrelationAgent(BaseAgent):
                 self.db.commit()
                 target_inc = new_inc
 
+            # Deduce contributing agents from telemetry event types
+            contributing_agents = set()
+            if has_auth:
+                contributing_agents.add("Authentication Agent")
+            if has_net:
+                contributing_agents.add("Network Monitoring Agent")
+            if has_proc or has_file:
+                contributing_agents.add("Endpoint Agent")
+            if has_priv:
+                contributing_agents.add("Malicious Behaviour Agent")
+            if any(e.source_ip and not any(e.source_ip.startswith(p) for p in ["127.", "10.", "192.168."]) for e in cluster_events):
+                contributing_agents.add("Threat Intelligence Agent")
+            if any(e.severity in ["HIGH", "CRITICAL"] for e in cluster_events):
+                contributing_agents.add("Anomaly Detection Agent")
+
+            duration_sec = (last_seen - first_seen).total_seconds() if (last_seen and first_seen) else 0.0
+            why_correlated = (
+                f"Clustered {len(cluster_events)} security telemetry signals around entity '{pivot_key}'. "
+                f"Activity spans [{', '.join(sorted(list(event_types)))}] exhibiting progressive adversarial traversal "
+                f"from initial probe to unauthorized access with peak severity {max_sev}."
+            )
+            when_correlated = {
+                "start_time": first_seen.isoformat() if first_seen else None,
+                "end_time": last_seen.isoformat() if last_seen else None,
+                "duration_seconds": round(duration_sec, 2),
+                "timestamp_str": f"{first_seen.strftime('%Y-%m-%d %H:%M:%S')} → {last_seen.strftime('%H:%M:%S')} UTC"
+            }
+            how_correlated = (
+                f"Synthesized using spatio-temporal entity graph clustering (Δt = {round(duration_sec, 1)}s) "
+                f"indexed by pivot '{pivot_key}' with cross-agent correlation combining evidence from "
+                f"{len(contributing_agents)} agents: {', '.join(sorted(list(contributing_agents)))}."
+            )
+
             self.record_finding(
                 title=f"Incident Aggregated: {inc_id} ({title})",
                 severity=max_sev,
@@ -150,7 +183,11 @@ class CorrelationAgent(BaseAgent):
                     "incident_id": inc_id,
                     "pivot_entity": pivot_key,
                     "event_count": len(cluster_events),
-                    "event_ids": [e.event_id for e in cluster_events]
+                    "event_ids": [e.event_id for e in cluster_events],
+                    "why": why_correlated,
+                    "when": when_correlated,
+                    "how": how_correlated,
+                    "contributing_agents": sorted(list(contributing_agents))
                 },
                 recommendations=[
                     f"Assign incident {inc_id} to tier-2 SOC investigator",

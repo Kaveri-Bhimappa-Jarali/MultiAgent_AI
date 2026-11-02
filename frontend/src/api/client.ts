@@ -116,6 +116,10 @@ export const api = {
     request<ResponseAction[]>(`/responses${status ? `?status=${status}` : ''}`),
   approveResponse: (actionId: string) =>
     request<ResponseAction>(`/responses/${actionId}/approve`, { method: 'POST' }),
+  allowResponse: (actionId: string) =>
+    request<ResponseAction>(`/responses/${actionId}/allow`, { method: 'POST' }),
+  denyResponse: (actionId: string, reason = 'Analyst rejected action') =>
+    request<ResponseAction>(`/responses/${actionId}/deny`, { method: 'POST', body: JSON.stringify({ reason }) }),
   simulateResponse: (actionId: string) =>
     request<ResponseAction>(`/responses/${actionId}/simulate`, { method: 'POST' }),
   executeResponse: (actionId: string, dryRun = true) =>

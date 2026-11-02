@@ -195,6 +195,24 @@ class MultiAgentSOCEngine:
                 if inc:
                     from app.services.risk_service import calculate_incident_risk
                     calculate_incident_risk(self.db, inc)
+
+                    # Trigger LLM Threat Reasoning Layer
+                    from app.services.llm_service import analyze_threat_findings
+                    try:
+                        llm_verdict = analyze_threat_findings(
+                            self.db,
+                            findings=findings or [],
+                            event=event,
+                            incident=inc
+                        )
+                        inc.investigation_status = "LLM_ANALYZED"
+                        if llm_verdict.get("response_status") == "AUTONOMOUSLY_CONTAINED":
+                            inc.response_status = "AUTONOMOUSLY_CONTAINED"
+                            inc.status = "CONTAINED"
+                        self.db.commit()
+                    except Exception as llm_err:
+                        print(f"[!] LLM analysis exception: {llm_err}")
+
                     broadcaster.publish_sync("INCIDENT_UPDATED", {
                         "incident_id": inc.incident_id,
                         "title": inc.title,
