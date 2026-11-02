@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { PageHeader } from '../components/common/PageHeader';
 import { api } from '../api/client';
 import { Incident } from '../types';
 import { FileText, Download, ShieldAlert, CheckCircle2, ArrowRight } from 'lucide-react';
@@ -31,18 +32,14 @@ export const Reports: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="pb-4 border-b border-navy-700/80">
-        <h1 className="text-2xl font-bold tracking-tight text-softwhite flex items-center space-x-2">
-          <span>SOC EXECUTIVE & INCIDENT DOSSIER REPORTS</span>
-          <span className="text-xs px-2.5 py-0.5 rounded-full bg-royal/20 text-royal-200 border border-royal/30 font-mono">
-            COMPLIANCE & AUDIT
-          </span>
-        </h1>
-        <p className="text-xs text-mutedslate mt-1 font-mono">
-          Download branded executive briefing documents and evidence-grounded incident forensic reports.
-        </p>
-      </div>
+      {/* Beginner-Friendly Page Header */}
+      <PageHeader
+        title="SOC Executive & Forensic Reports"
+        badge="Compliance & Audit"
+        badgeVariant="gold"
+        description="Generate and download branded PDF executive summary briefings and detailed incident forensic dossiers for management and compliance reviews."
+        terms={['Incident', 'Risk Score', 'SOAR']}
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Executive Summary PDF Card */}

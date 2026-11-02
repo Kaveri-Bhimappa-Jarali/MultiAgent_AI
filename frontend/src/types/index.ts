@@ -281,6 +281,31 @@ export interface EvaluationRun {
   evaluated_at: string;
 }
 
+export interface AttentionItem {
+  id: string;
+  category: string;
+  title: string;
+  description: string;
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
+  action_label: string;
+  action_url: string;
+  timestamp: string;
+}
+
+export interface SystemHealthComponent {
+  name: string;
+  status: 'Online' | 'Needs Attention' | 'Offline' | 'Unknown';
+  details: string;
+  is_simulated?: boolean;
+}
+
+export interface AgentSummary {
+  total: number;
+  available: number;
+  investigating: number;
+  error_count: number;
+}
+
 export interface DashboardData {
   metrics: {
     total_events: number;
@@ -302,4 +327,7 @@ export interface DashboardData {
   recent_critical_incidents: Array<any>;
   recent_events: Array<any>;
   system_status: Record<string, string>;
+  attention_items?: AttentionItem[];
+  system_health_components?: Record<string, SystemHealthComponent>;
+  agent_summary?: AgentSummary;
 }

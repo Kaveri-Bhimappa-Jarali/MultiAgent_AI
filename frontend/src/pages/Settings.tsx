@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { PageHeader } from '../components/common/PageHeader';
 import { api } from '../api/client';
 import { Settings as SettingsIcon, Shield, Sliders, CheckCircle2 } from 'lucide-react';
 import { formatSocTimestamp } from '../utils/timestamps.js';
@@ -37,18 +38,14 @@ export const Settings: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="pb-4 border-b border-navy-700/80">
-        <h1 className="text-2xl font-bold tracking-tight text-softwhite flex items-center space-x-2">
-          <span>GOVERNANCE POLICIES & AUDIT LOGS</span>
-          <span className="text-xs px-2.5 py-0.5 rounded-full bg-royal/20 text-royal-200 border border-royal/30 font-mono">
-            SECURITY & COMPLIANCE
-          </span>
-        </h1>
-        <p className="text-xs text-mutedslate mt-1 font-mono">
-          Configure automated containment thresholds, dry-run safety modes, and inspect immutable system audit records.
-        </p>
-      </div>
+      {/* Beginner-Friendly Page Header */}
+      <PageHeader
+        title="Governance Policies & Audit Logs"
+        badge="Security & Compliance"
+        badgeVariant="royal"
+        description="Configure automated containment thresholds, require administrator approvals, toggle dry-run safety modes, and inspect immutable system audit records."
+        terms={['SOAR', 'Response Verification']}
+      />
 
       {savedMessage && (
         <div className="p-3.5 rounded-xl bg-emerald-500/15 border border-socsuccess/40 text-xs font-mono text-socsuccess flex items-center space-x-2">

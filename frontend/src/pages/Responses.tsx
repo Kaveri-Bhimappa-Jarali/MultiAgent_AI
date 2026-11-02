@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { PageHeader } from '../components/common/PageHeader';
 import { api } from '../api/client';
 import { ResponseAction, VerificationResult } from '../types';
 import { StatusBadge } from '../components/common/StatusBadge';
@@ -88,27 +89,31 @@ export const Responses: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-navy-700/80 gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-softwhite flex items-center space-x-2">
-            <span>SOAR DEFENSIVE RESPONSE &amp; CONTAINMENT CONSOLE</span>
-            <span className="text-xs px-2.5 py-0.5 rounded-full bg-royal/20 text-royal-200 border border-royal/30 font-mono">
-              POLICY CONTROLLED
-            </span>
-          </h1>
-          <p className="text-xs text-mutedslate mt-1 font-mono">
-            Review the proposed effect and run a no-change simulation before administrator approval or lab dispatch.
-          </p>
-        </div>
-        <button
-          onClick={() => void fetchData()}
-          disabled={loading}
-          className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-navy-800 border border-slate-700 text-mutedslate hover:text-softwhite text-xs font-mono transition disabled:opacity-50"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-          <span>Refresh</span>
-        </button>
-      </div>
+      {/* Beginner-Friendly Page Header */}
+      <PageHeader
+        title="SOAR Automated Responses"
+        badge="Policy Controlled"
+        badgeVariant="gold"
+        description="Review, simulate, and approve defensive containment actions proposed by AI agents. Verify that executed actions genuinely neutralized the threat."
+        workflowStep={{
+          stepNumber: 5,
+          totalSteps: 6,
+          stepName: 'Review & Authorize Responses',
+          nextRoute: '/responses',
+          nextLabel: 'Verify Outcomes (Step 6)'
+        }}
+        terms={['SOAR', 'Response Verification', 'Severity']}
+        actions={
+          <button
+            onClick={() => void fetchData()}
+            disabled={loading}
+            className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-navy-800 border border-slate-700 text-mutedslate hover:text-softwhite text-xs font-mono transition disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </button>
+        }
+      />
 
       {error && (
         <div role="alert" className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-200 text-sm font-sans">
