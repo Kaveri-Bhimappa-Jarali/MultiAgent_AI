@@ -34,24 +34,6 @@ interface NavSection {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
-<<<<<<< HEAD
-  const navItems = [
-    { to: '/', label: 'Command Center', icon: Activity },
-    { to: '/events', label: 'Security Events', icon: Radio },
-    { to: '/ingestion', label: 'Data Ingestion', icon: Layers },
-    { to: '/health-monitor', label: 'Ingestion Health', icon: Activity },
-    { to: '/detections', label: 'Threat Detections', icon: AlertTriangle },
-    { to: '/agents', label: 'Multi-Agent SOC', icon: Bot },
-    { to: '/incidents', label: 'Incidents & RCA', icon: ShieldAlert },
-    { to: '/responses', label: 'SOAR Responses', icon: Zap },
-    { to: '/intelligence', label: 'Threat Intel (CTI)', icon: Crosshair },
-    { to: '/evaluation', label: 'Historical Lab', icon: Database },
-    { to: '/virtual-lab', label: 'Virtual Enterprise Lab', icon: Network },
-    { to: '/simulation', label: 'Attack Simulation', icon: Crosshair },
-    { to: '/demo', label: 'Demo Attack Lab', icon: FlaskConical },
-    { to: '/reports', label: 'SOC Reports', icon: FileText },
-    { to: '/settings', label: 'Policies & Audits', icon: Settings },
-=======
   const location = useLocation();
 
   const navSections: NavSection[] = [
@@ -88,6 +70,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
     {
       title: 'TEST & EVALUATE',
       items: [
+        { to: '/simulation', label: 'Attack Simulation', icon: Crosshair, description: 'Live VM Attack Runner' },
         { to: '/demo', label: 'Demo Attack Lab', icon: FlaskConical, description: 'Simulated Scenarios' },
         { to: '/evaluation', label: 'Historical Lab', icon: Database, description: 'Dataset Replay & Audit' },
         { to: '/evaluation?tab=ml', label: 'Evaluation Lab', icon: FlaskConical, description: 'Model Benchmarks' }
@@ -100,7 +83,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
         { to: '/settings', label: 'Settings', icon: Settings, description: 'System Configuration' }
       ]
     }
->>>>>>> 93e28df746070bba2682daefc755886fa1ec6738
   ];
 
   return (

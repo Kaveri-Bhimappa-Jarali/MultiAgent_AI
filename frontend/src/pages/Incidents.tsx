@@ -56,32 +56,6 @@ export const Incidents: React.FC = () => {
 
   return (
     <div className="space-y-6">
-<<<<<<< HEAD
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-navy-700/80 gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-softwhite flex items-center space-x-2">
-            <span>INCIDENT MANAGEMENT & CORRELATION</span>
-            <span className="text-xs px-2.5 py-0.5 rounded-full bg-royal/20 text-royal-200 border border-royal/30 font-mono">
-              SIEM & SOAR
-            </span>
-          </h1>
-          <p className="text-xs text-mutedslate mt-1 font-mono">
-            Unified multi-stage attack incidents correlated by the autonomous Correlation and Investigation Agents.
-          </p>
-        </div>
-
-        <div className="flex items-center space-x-3">
-          <div className="flex items-center space-x-1.5 text-[10px] font-mono text-emerald-400 px-2.5 py-1.5 rounded-lg bg-emerald-400/10 border border-emerald-400/20">
-            <Radio className="w-3 h-3 animate-pulse" />
-            <span>LIVE</span>
-            {newCount > 0 && (
-              <span className="ml-1 px-1.5 py-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold animate-pulse">
-                +{newCount} new
-              </span>
-            )}
-          </div>
-=======
       {/* Beginner-Friendly Page Header */}
       <PageHeader
         title="Incidents & Root Cause Analysis"
@@ -97,14 +71,24 @@ export const Incidents: React.FC = () => {
         }}
         terms={['Incident', 'Risk Score', 'Severity']}
         actions={
->>>>>>> 93e28df746070bba2682daefc755886fa1ec6738
-          <button
-            onClick={() => { fetchIncidents(); setNewCount(0); }}
-            className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-navy-800 border border-slate-700 text-mutedslate hover:text-softwhite text-xs font-mono transition"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>Refresh</span>
-          </button>
+          <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-1.5 text-[10px] font-mono text-emerald-400 px-2.5 py-1.5 rounded-lg bg-emerald-400/10 border border-emerald-400/20">
+              <Radio className="w-3 h-3 animate-pulse" />
+              <span>LIVE</span>
+              {newCount > 0 && (
+                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold animate-pulse">
+                  +{newCount} new
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => { fetchIncidents(); setNewCount(0); }}
+              className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-navy-800 border border-slate-700 text-mutedslate hover:text-softwhite text-xs font-mono transition"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Refresh</span>
+            </button>
+          </div>
         }
       />
 
