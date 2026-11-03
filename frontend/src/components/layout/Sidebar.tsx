@@ -73,8 +73,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
       items: [
         { to: '/simulation', label: 'Attack Simulation', icon: Crosshair, description: 'Live VM Attack Runner' },
         { to: '/demo', label: 'Demo Attack Lab', icon: FlaskConical, description: 'Simulated Scenarios' },
-        { to: '/evaluation', label: 'Historical Lab', icon: Database, description: 'Dataset Replay & Audit' },
-        { to: '/evaluation?tab=ml', label: 'Evaluation Lab', icon: FlaskConical, description: 'Model Benchmarks' }
+        // { to: '/evaluation', label: 'Historical Lab', icon: Database, description: 'Dataset Replay & Audit' },
+        // { to: '/evaluation?tab=ml', label: 'Evaluation Lab', icon: FlaskConical, description: 'Model Benchmarks' }
       ]
     },
     {
@@ -88,9 +88,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
 
   return (
     <aside
-      className={`fixed top-0 left-0 z-40 h-screen transition-all duration-300 flex flex-col ${
-        collapsed ? 'w-20' : 'w-64'
-      }`}
+      className={`fixed top-0 left-0 z-40 h-screen transition-all duration-300 flex flex-col ${collapsed ? 'w-20' : 'w-64'
+        }`}
       style={{
         background: 'linear-gradient(180deg, #070B16 0%, #0B1020 60%, #070B16 100%)',
         borderRight: '1px solid rgba(109,90,230,0.15)',
@@ -166,7 +165,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
                 item.to === '/'
                   ? location.pathname === '/'
                   : location.pathname === itemBasePath &&
-                    (!item.to.includes('?') || location.search === item.to.slice(itemBasePath.length));
+                  (!item.to.includes('?') || location.search === item.to.slice(itemBasePath.length));
 
               return (
                 <NavLink
@@ -176,16 +175,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
                   style={
                     isCurrent
                       ? {
-                          background: 'linear-gradient(135deg, rgba(109,90,230,0.25), rgba(109,90,230,0.1))',
-                          color: '#F5F7FC',
-                          border: '1px solid rgba(109,90,230,0.4)',
-                          boxShadow: '0 0 12px rgba(109,90,230,0.2), inset 0 1px 0 rgba(255,255,255,0.06)',
-                          fontWeight: 600
-                        }
+                        background: 'linear-gradient(135deg, rgba(109,90,230,0.25), rgba(109,90,230,0.1))',
+                        color: '#F5F7FC',
+                        border: '1px solid rgba(109,90,230,0.4)',
+                        boxShadow: '0 0 12px rgba(109,90,230,0.2), inset 0 1px 0 rgba(255,255,255,0.06)',
+                        fontWeight: 600
+                      }
                       : {
-                          color: 'rgba(148,163,184,0.85)',
-                          border: '1px solid transparent'
-                        }
+                        color: 'rgba(148,163,184,0.85)',
+                        border: '1px solid transparent'
+                      }
                   }
                   onMouseEnter={e => {
                     if (!isCurrent) {

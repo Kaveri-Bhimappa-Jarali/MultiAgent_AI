@@ -15,7 +15,7 @@ import { Incidents } from './pages/Incidents';
 import { IncidentDetail } from './pages/IncidentDetail';
 import { Responses } from './pages/Responses';
 import { ThreatIntel } from './pages/ThreatIntel';
-import { EvaluationLab } from './pages/EvaluationLab';
+// import { EvaluationLab } from './pages/EvaluationLab';
 import { DemoLab } from './pages/DemoLab';
 import { Reports } from './pages/Reports';
 import { Settings } from './pages/Settings';
@@ -72,7 +72,7 @@ export const App: React.FC = () => {
               <Route path="incidents/:incidentId" element={<IncidentDetail />} />
               <Route path="responses" element={<Responses />} />
               <Route path="intelligence" element={<ThreatIntel />} />
-              <Route path="evaluation" element={<EvaluationLab />} />
+              {/* <Route path="evaluation" element={<EvaluationLab />} /> */}
               <Route path="demo" element={<DemoLab />} />
               <Route path="virtual-lab" element={<VirtualLab />} />
               <Route path="simulation" element={<AttackSimulation />} />
