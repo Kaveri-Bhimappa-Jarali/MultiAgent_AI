@@ -113,7 +113,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
           </div>
           {!collapsed && (
             <div className="flex flex-col truncate">
-              <span className="font-bold text-sm text-white tracking-wide">ROYAL SOC</span>
+              <span className="font-bold text-sm text-white tracking-wide">Multi AI Agents in SOC</span>
               <span
                 className="text-[10px] tracking-widest font-mono uppercase"
                 style={{ color: '#D8B875' }}
