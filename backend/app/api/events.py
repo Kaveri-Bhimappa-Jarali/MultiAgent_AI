@@ -15,6 +15,7 @@ from app.services.time_utils import utc_isoformat
 router = APIRouter(prefix="/events", tags=["Events"])
 
 @router.get("")
+@router.get("/")
 def list_events(
     severity: Optional[str] = Query(None),
     event_type: Optional[str] = Query(None),

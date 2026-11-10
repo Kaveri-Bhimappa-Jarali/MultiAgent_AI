@@ -17,7 +17,7 @@ from app.api.dashboard import router as dashboard_router
 from app.api.events import router as events_router
 from app.api.detections import router as detections_router
 from app.api.agents import router as agents_router
-from app.api.incidents import router as incidents_router
+from app.api.incidents import router as incidents_router, correlation_router
 from app.api.responses import router as responses_router
 from app.api.intelligence import router as intelligence_router
 from app.api.evaluation import router as evaluation_router
@@ -82,6 +82,7 @@ app.include_router(events_router, prefix=settings.API_V1_STR)
 app.include_router(detections_router, prefix=settings.API_V1_STR)
 app.include_router(agents_router, prefix=settings.API_V1_STR)
 app.include_router(incidents_router, prefix=settings.API_V1_STR)
+app.include_router(correlation_router, prefix=settings.API_V1_STR)
 app.include_router(responses_router, prefix=settings.API_V1_STR)
 app.include_router(intelligence_router, prefix=settings.API_V1_STR)
 app.include_router(evaluation_router, prefix=settings.API_V1_STR)

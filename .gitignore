@@ -38,3 +38,15 @@ data/raw/*/*.csv
 data/processed/*.csv
 !data/raw/**/.gitkeep
 *.tsbuildinfo
+
+
+# .md files 
+agents.md
+api.md
+architecture.md
+context.md
+features.md
+plan.md
+prd.md
+PROJECT_OVERVIEW.md
+RUNNING.md

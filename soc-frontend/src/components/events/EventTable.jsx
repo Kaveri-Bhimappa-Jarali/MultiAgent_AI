@@ -18,11 +18,11 @@ export function EventTable({ events = [], selectedEvent = null, onSelectEvent })
       const matchStatus = statusFilter === 'All' || evt.status === statusFilter
       const query = search.toLowerCase()
       const matchSearch =
-        evt.id.toLowerCase().includes(query) ||
-        evt.type.toLowerCase().includes(query) ||
-        evt.source.toLowerCase().includes(query) ||
-        evt.destination.toLowerCase().includes(query) ||
-        evt.category.toLowerCase().includes(query)
+        String(evt.id || '').toLowerCase().includes(query) ||
+        String(evt.type || '').toLowerCase().includes(query) ||
+        String(evt.source || '').toLowerCase().includes(query) ||
+        String(evt.destination || '').toLowerCase().includes(query) ||
+        String(evt.category || '').toLowerCase().includes(query)
 
       return matchCat && matchStatus && matchSearch
     })

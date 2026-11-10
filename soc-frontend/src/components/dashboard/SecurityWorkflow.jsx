@@ -1,11 +1,13 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { workflowStages } from '../../data/mockSecurityData'
+import { workflowStages as defaultWorkflowStages } from '../../data/mockSecurityData'
 import { ArrowRight, ChevronRight, Activity, Zap } from 'lucide-react'
 
-export function SecurityWorkflow({ activeStep = null, onSelectStep = null }) {
+export function SecurityWorkflow({ stages = null, activeStep = null, onSelectStep = null }) {
   const navigate = useNavigate()
+  // Use real stages from prop when available, otherwise fall back to static mock shapes
+  const workflowStages = stages || defaultWorkflowStages
 
   const handleStepClick = (stage) => {
     if (onSelectStep) {

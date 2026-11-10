@@ -10,9 +10,9 @@ import { BrainCircuit, Sparkles, Filter, ShieldCheck, Zap } from 'lucide-react'
 
 export function AIAnalysis() {
   const location = useLocation()
-  const initialId = location.state?.incidentId || 'INC-2026-001'
+  const initialId = location.state?.incidentId || null
 
-  const [incidents, setIncidents] = useState(defaultIncidents)
+  const [incidents, setIncidents] = useState([])
   const [selectedIncidentId, setSelectedIncidentId] = useState(initialId)
   const [isBackendLoaded, setIsBackendLoaded] = useState(false)
 
@@ -24,11 +24,7 @@ export function AIAnalysis() {
         if (isMounted && Array.isArray(rawList) && rawList.length > 0) {
           const mapped = rawList.map(mapBackendIncident).filter(Boolean)
           if (mapped.length > 0) {
-            setIncidents(prev => {
-              const existingIds = new Set(mapped.map(m => m.id))
-              const remaining = prev.filter(p => !existingIds.has(p.id))
-              return [...mapped, ...remaining]
-            })
+            setIncidents(mapped)
             setIsBackendLoaded(true)
             if (!location.state?.incidentId) {
               setSelectedIncidentId(mapped[0].id)
@@ -36,7 +32,11 @@ export function AIAnalysis() {
           }
         }
       } catch (err) {
-        console.info('[AIAnalysis] Using simulated model data:', err.message)
+        console.info('[AIAnalysis] Using simulated model data fallback:', err.message)
+        if (isMounted) {
+          setIncidents(defaultIncidents)
+          setSelectedIncidentId(defaultIncidents[0]?.id)
+        }
       }
     }
     loadBackendIncidents()
@@ -45,7 +45,8 @@ export function AIAnalysis() {
 
   const currentIncident =
     incidents.find(inc => inc.id === selectedIncidentId) ||
-    incidents[0]
+    incidents[0] ||
+    null
 
   return (
     <div className="p-4 lg:p-8 space-y-7">

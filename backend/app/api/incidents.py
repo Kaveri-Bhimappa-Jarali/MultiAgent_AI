@@ -19,8 +19,10 @@ from app.agents.orchestrator import MultiAgentSOCEngine
 from app.services.time_utils import utc_isoformat
 
 router = APIRouter(prefix="/incidents", tags=["Incidents"])
+correlation_router = APIRouter(tags=["Correlation"])
 
 @router.get("", response_model=List[IncidentResponse])
+@router.get("/", response_model=List[IncidentResponse])
 def list_incidents(
     severity: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
@@ -37,6 +39,25 @@ def list_incidents(
         query = query.filter(Incident.is_simulated == is_simulated)
     incidents = query.order_by(Incident.created_at.desc()).limit(limit).all()
     return [IncidentResponse.model_validate(i) for i in incidents]
+
+# Correlation alias routes so /api/correlation and /api/correlations work out of the box
+@correlation_router.get("/correlation", response_model=List[IncidentResponse])
+@correlation_router.get("/correlation/", response_model=List[IncidentResponse])
+@correlation_router.get("/correlations", response_model=List[IncidentResponse])
+@correlation_router.get("/correlations/", response_model=List[IncidentResponse])
+def list_correlations(
+    severity: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    is_simulated: Optional[bool] = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db)
+):
+    return list_incidents(severity=severity, status=status, is_simulated=is_simulated, limit=limit, db=db)
+
+@correlation_router.get("/correlation/{incident_id}", response_model=IncidentDetailResponse)
+@correlation_router.get("/correlations/{incident_id}", response_model=IncidentDetailResponse)
+def get_correlation_detail(incident_id: str, db: Session = Depends(get_db)):
+    return get_incident_detail(incident_id=incident_id, db=db)
 
 @router.get("/{incident_id}", response_model=IncidentDetailResponse)
 def get_incident_detail(incident_id: str, db: Session = Depends(get_db)):

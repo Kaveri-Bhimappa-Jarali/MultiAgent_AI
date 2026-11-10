@@ -7,29 +7,39 @@ import { mapBackendIncident } from '../api/incidentMapper'
 import { GitMerge, Cpu, Network, ShieldCheck, Zap } from 'lucide-react'
 
 export function Correlation() {
-  const [incidents, setIncidents] = useState(defaultIncidents)
-  const [selectedIncident, setSelectedIncident] = useState(defaultIncidents[0])
+  const [incidents, setIncidents] = useState([])
+  const [selectedIncident, setSelectedIncident] = useState(null)
   const [isBackendLoaded, setIsBackendLoaded] = useState(false)
+  const [totalEvents, setTotalEvents] = useState(0)
 
   useEffect(() => {
     let isMounted = true
     async function loadIncidents() {
       try {
-        const rawList = await api.getIncidents()
-        if (isMounted && Array.isArray(rawList) && rawList.length > 0) {
+        const [rawList, summary] = await Promise.all([
+          api.getIncidents().catch(() => []),
+          api.getDashboardSummary().catch(() => null),
+        ])
+        if (!isMounted) return
+        
+        if (summary?.metrics?.total_events !== undefined) {
+          setTotalEvents(summary.metrics.total_events)
+        }
+
+        if (Array.isArray(rawList) && rawList.length > 0) {
           const mapped = rawList.map(mapBackendIncident).filter(Boolean)
           if (mapped.length > 0) {
-            setIncidents(prev => {
-              const existingIds = new Set(mapped.map(m => m.id))
-              const remaining = prev.filter(p => !existingIds.has(p.id))
-              return [...mapped, ...remaining]
-            })
+            setIncidents(mapped)
             setSelectedIncident(mapped[0])
             setIsBackendLoaded(true)
           }
         }
       } catch (err) {
-        console.info('[Correlation] Using simulated attack chains:', err.message)
+        console.info('[Correlation] Using simulated attack chains fallback:', err.message)
+        if (isMounted) {
+          setIncidents(defaultIncidents)
+          setSelectedIncident(defaultIncidents[0])
+        }
       }
     }
     loadIncidents()
@@ -63,18 +73,22 @@ export function Correlation() {
         <div className="flex items-center gap-2">
           <span className="text-xs text-slate-400 font-semibold hidden sm:inline">Active Chains:</span>
           <select
-            value={selectedIncident.id}
+            value={selectedIncident?.id || ''}
             onChange={(e) => {
               const found = incidents.find(inc => inc.id === e.target.value)
               if (found) setSelectedIncident(found)
             }}
             className="bg-[#0d121c] border border-[#1e2736] text-slate-200 text-xs rounded-xl px-3 py-1.5 font-mono focus:outline-none focus:border-cyan-500"
           >
-            {incidents.map(inc => (
-              <option key={inc.id} value={inc.id}>
-                {inc.id} — {inc.title.slice(0, 32)}...
-              </option>
-            ))}
+            {incidents.length === 0 ? (
+              <option value="">No Active Incident Chains</option>
+            ) : (
+              incidents.map(inc => (
+                <option key={inc.id} value={inc.id}>
+                  {inc.id} — {inc.title?.slice(0, 32) || 'Incident'}...
+                </option>
+              ))
+            )}
           </select>
         </div>
       </div>
@@ -84,7 +98,7 @@ export function Correlation() {
         <div className="rounded-xl p-4 bg-[#0d121c] border border-[#1e2736] shadow-md flex items-center justify-between">
           <div>
             <div className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">Events Received</div>
-            <div className="text-xl font-black text-white mt-0.5">12,847</div>
+            <div className="text-xl font-black text-white mt-0.5">{totalEvents || incidents.reduce((acc, i) => acc + (i.event_count || 1), 0)}</div>
           </div>
           <div className="w-8 h-8 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center font-bold">
             📥
@@ -93,8 +107,8 @@ export function Correlation() {
 
         <div className="rounded-xl p-4 bg-[#0d121c] border border-[#1e2736] shadow-md flex items-center justify-between">
           <div>
-            <div className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">Correlated Events</div>
-            <div className="text-xl font-black text-cyan-300 mt-0.5">248</div>
+            <div className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">Correlated Incidents</div>
+            <div className="text-xl font-black text-cyan-300 mt-0.5">{incidents.length}</div>
           </div>
           <div className="w-8 h-8 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold">
             🔗

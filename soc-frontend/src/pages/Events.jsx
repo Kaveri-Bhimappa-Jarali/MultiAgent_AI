@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useLiveEvents } from '../hooks/useLiveEvents'
 import { EventTable } from '../components/events/EventTable'
 import { EventDetails } from '../components/events/EventDetails'
@@ -7,7 +7,13 @@ import { Inbox, Radio, Shield, Zap } from 'lucide-react'
 
 export function Events() {
   const { events, isSimulating, toggleSimulation } = useLiveEvents()
-  const [selectedEvent, setSelectedEvent] = useState(events[0])
+  const [selectedEvent, setSelectedEvent] = useState(null)
+
+  useEffect(() => {
+    if (!selectedEvent && events && events.length > 0) {
+      setSelectedEvent(events[0])
+    }
+  }, [events, selectedEvent])
 
   return (
     <div className="p-4 lg:p-8 space-y-6">

@@ -48,52 +48,60 @@ export function RecentEvents({ events = [] }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-[#182130]">
-            {displayEvents.map(evt => (
-              <tr
-                key={evt.id}
-                className="hover:bg-[#111827]/70 transition-colors duration-150 group"
-              >
-                <td className="py-3 px-3 font-mono font-semibold text-purple-300">
-                  {evt.id}
-                </td>
-                <td className="py-3 px-3 font-medium text-white">
-                  {evt.type}
-                </td>
-                <td className="py-3 px-3 font-mono text-slate-400">
-                  {evt.source}
-                </td>
-                <td className="py-3 px-3 text-slate-300">
-                  <span className="px-2 py-0.5 rounded bg-[#162032] border border-[#23314d] text-[11px]">
-                    {evt.category}
-                  </span>
-                </td>
-                <td className="py-3 px-3">
-                  {evt.correlationId ? (
-                    <Link
-                      to="/correlation"
-                      className="inline-flex items-center gap-1 font-mono text-[11px] text-cyan-400 hover:text-cyan-300"
-                    >
-                      <GitMerge className="w-3 h-3" />
-                      <span>{evt.correlationId}</span>
-                    </Link>
-                  ) : (
-                    <span className="text-[11px] text-slate-500">Standalone</span>
-                  )}
-                </td>
-                <td className="py-3 px-3">
-                  <span className="inline-flex items-center gap-1 text-[11px] text-purple-300">
-                    <BrainCircuit className="w-3 h-3" />
-                    <span>{evt.llmStatus}</span>
-                  </span>
-                </td>
-                <td className="py-3 px-3">
-                  <Badge type={evt.severity} size="xs" />
-                </td>
-                <td className="py-3 px-3 text-right">
-                  <Badge type={evt.action} size="xs" />
+            {displayEvents.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="py-8 text-center text-slate-500 font-mono text-xs">
+                  No security events recorded. Ingest telemetry or launch an attack simulation to populate real-time feeds.
                 </td>
               </tr>
-            ))}
+            ) : (
+              displayEvents.map(evt => (
+                <tr
+                  key={evt.id}
+                  className="hover:bg-[#111827]/70 transition-colors duration-150 group"
+                >
+                  <td className="py-3 px-3 font-mono font-semibold text-purple-300">
+                    {evt.id}
+                  </td>
+                  <td className="py-3 px-3 font-medium text-white">
+                    {evt.type}
+                  </td>
+                  <td className="py-3 px-3 font-mono text-slate-400">
+                    {evt.source}
+                  </td>
+                  <td className="py-3 px-3 text-slate-300">
+                    <span className="px-2 py-0.5 rounded bg-[#162032] border border-[#23314d] text-[11px]">
+                      {evt.category}
+                    </span>
+                  </td>
+                  <td className="py-3 px-3">
+                    {evt.correlationId ? (
+                      <Link
+                        to="/correlation"
+                        className="inline-flex items-center gap-1 font-mono text-[11px] text-cyan-400 hover:text-cyan-300"
+                      >
+                        <GitMerge className="w-3 h-3" />
+                        <span>{evt.correlationId}</span>
+                      </Link>
+                    ) : (
+                      <span className="text-[11px] text-slate-500">Standalone</span>
+                    )}
+                  </td>
+                  <td className="py-3 px-3">
+                    <span className="inline-flex items-center gap-1 text-[11px] text-purple-300">
+                      <BrainCircuit className="w-3 h-3" />
+                      <span>{evt.llmStatus}</span>
+                    </span>
+                  </td>
+                  <td className="py-3 px-3">
+                    <Badge type={evt.severity} size="xs" />
+                  </td>
+                  <td className="py-3 px-3 text-right">
+                    <Badge type={evt.action} size="xs" />
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>

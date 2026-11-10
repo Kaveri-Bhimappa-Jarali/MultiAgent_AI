@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react'
-import { rawSecurityEvents } from '../data/mockSecurityData'
 import { api } from '../api/client'
 
 function mapBackendEvent(e) {
@@ -45,8 +44,8 @@ function mapBackendEvent(e) {
 }
 
 export function useLiveEvents() {
-  const [events, setEvents] = useState(rawSecurityEvents)
-  const [isSimulating, setIsSimulating] = useState(true)
+  const [events, setEvents] = useState([])  // Start empty – real events loaded from backend
+  const [isSimulating, setIsSimulating] = useState(false)
   const [lastAddedEvent, setLastAddedEvent] = useState(null)
   const [flashNew, setFlashNew] = useState(false)
   const [isLiveConnected, setIsLiveConnected] = useState(false)
@@ -58,15 +57,10 @@ export function useLiveEvents() {
 
     async function loadBackendEvents() {
       try {
-        const data = await api.getEvents({ limit: 20 })
+        const data = await api.getEvents({ limit: 100 })
         if (isMounted && data?.events && data.events.length > 0) {
           const mapped = data.events.map(mapBackendEvent)
-          // Merge backend events with initial state
-          setEvents(prev => {
-            const existingIds = new Set(mapped.map(m => m.id))
-            const unmapped = prev.filter(p => !existingIds.has(p.id))
-            return [...mapped, ...unmapped].slice(0, 35)
-          })
+          setEvents(mapped)
           setIsLiveConnected(true)
         }
       } catch (err) {
@@ -105,9 +99,9 @@ export function useLiveEvents() {
     }
   }, [])
 
-  // 3. Fallback Periodic Ingestion Simulation
+  // 3. Fallback Periodic Ingestion Simulation (only when backend is offline)
   useEffect(() => {
-    if (!isSimulating) return
+    if (!isSimulating || isLiveConnected) return
 
     const interval = setInterval(() => {
       const now = new Date()
