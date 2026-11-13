@@ -33,6 +33,9 @@ import {
 } from 'lucide-react';
 import { useWebSocket } from '../context/WebSocketContext';
 import { formatSocTimestamp } from '../utils/timestamps.js';
+import { SecurityWorkflow } from '../components/dashboard/SecurityWorkflow';
+import { RiskGauge } from '../components/dashboard/RiskGauge';
+import { ActivityChart } from '../components/dashboard/ActivityChart';
 
 // Technical terms glossary entries
 const GLOSSARY_TERMS = [
@@ -266,7 +269,8 @@ export const Dashboard: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* 1. WELCOME SECTION */}
-      <div className="p-6 rounded-2xl bg-gradient-to-r from-navy-900 via-navy-850 to-navy-900 border border-navy-700/80 shadow-xl">
+      <div className="relative overflow-hidden p-6 rounded-2xl bg-gradient-to-r from-navy-950 via-navy-900 to-navy-950 border border-navy-700/80 shadow-2xl">
+        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-royal to-transparent opacity-80" />
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
             <div className="flex items-center space-x-3 mb-2">
@@ -336,20 +340,26 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* 2. SUMMARY CARDS (5 Essential Metrics with Explanations) */}
+      {/* 2. END-TO-END SOC INTELLIGENCE PIPELINE */}
+      <SecurityWorkflow />
+
+      {/* 3. SUMMARY CARDS (5 Essential Metrics with Explanations) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Card 1: Total Events */}
         <div
           onClick={() => navigate('/events')}
-          className="p-4 rounded-xl bg-navy-800 border border-slate-800 hover:border-royal/50 transition cursor-pointer flex flex-col justify-between"
+          className="relative overflow-hidden p-5 rounded-2xl bg-navy-800 border border-navy-700/80 hover:border-royal/60 transition-all duration-200 shadow-lg hover:shadow-glow-royal cursor-pointer flex flex-col justify-between hover:-translate-y-0.5"
         >
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-royal/80 to-transparent" />
           <div>
             <div className="flex items-center justify-between text-mutedslate mb-1">
-              <span className="text-xs font-medium uppercase font-mono">Total Security Events</span>
-              <Radio className="w-4 h-4 text-royal-300" />
+              <span className="text-[11px] font-semibold uppercase font-mono tracking-wider">Total Events</span>
+              <div className="w-8 h-8 rounded-lg bg-royal/15 flex items-center justify-center text-royal-300">
+                <Radio className="w-4 h-4" />
+              </div>
             </div>
-            <p className="text-2xl font-bold font-mono text-softwhite">{metrics.total_events.toLocaleString()}</p>
-            <p className="text-[11px] text-emerald-400 font-mono mt-0.5">+{metrics.events_in_timerange} in past 24h</p>
+            <p className="text-2xl font-black font-mono tracking-tight text-softwhite">{metrics.total_events.toLocaleString()}</p>
+            <p className="text-[11px] text-emerald-400 font-mono mt-0.5 font-medium">+{metrics.events_in_timerange} in past 24h</p>
           </div>
           <p className="text-[11px] text-mutedslate mt-3 border-t border-navy-700/60 pt-2 leading-relaxed">
             Raw telemetry logs captured from endpoints, servers, and network devices.
@@ -359,17 +369,20 @@ export const Dashboard: React.FC = () => {
         {/* Card 2: Open Incidents */}
         <div
           onClick={() => navigate('/incidents')}
-          className={`p-4 rounded-xl bg-navy-800 border transition cursor-pointer flex flex-col justify-between ${
-            metrics.open_incidents > 0 ? 'border-rose-500/50 shadow-rose-950/20' : 'border-slate-800 hover:border-royal/50'
+          className={`relative overflow-hidden p-5 rounded-2xl bg-navy-800 border transition-all duration-200 cursor-pointer flex flex-col justify-between hover:-translate-y-0.5 shadow-lg ${
+            metrics.open_incidents > 0 ? 'border-rose-500/50 hover:border-rose-500/80 hover:shadow-glow-red' : 'border-navy-700/80 hover:border-royal/60 hover:shadow-glow-royal'
           }`}
         >
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-rose-500/80 to-transparent" />
           <div>
             <div className="flex items-center justify-between text-mutedslate mb-1">
-              <span className="text-xs font-medium uppercase font-mono">Open Incidents</span>
-              <ShieldAlert className={`w-4 h-4 ${metrics.open_incidents > 0 ? 'text-rose-400' : 'text-slate-400'}`} />
+              <span className="text-[11px] font-semibold uppercase font-mono tracking-wider">Open Incidents</span>
+              <div className="w-8 h-8 rounded-lg bg-rose-500/15 flex items-center justify-center text-rose-400">
+                <ShieldAlert className="w-4 h-4" />
+              </div>
             </div>
-            <p className="text-2xl font-bold font-mono text-softwhite">{metrics.open_incidents}</p>
-            <p className="text-[11px] text-amber-300 font-mono mt-0.5">
+            <p className="text-2xl font-black font-mono tracking-tight text-softwhite">{metrics.open_incidents}</p>
+            <p className="text-[11px] text-amber-300 font-mono mt-0.5 font-medium">
               {metrics.critical_high_incidents} Critical / High priority
             </p>
           </div>
@@ -381,17 +394,20 @@ export const Dashboard: React.FC = () => {
         {/* Card 3: High/Critical Priority Alerts */}
         <div
           onClick={() => navigate('/detections')}
-          className={`p-4 rounded-xl bg-navy-800 border transition cursor-pointer flex flex-col justify-between ${
-            metrics.critical_high_incidents > 0 ? 'border-rose-500/50 shadow-rose-950/20' : 'border-slate-800 hover:border-royal/50'
+          className={`relative overflow-hidden p-5 rounded-2xl bg-navy-800 border transition-all duration-200 cursor-pointer flex flex-col justify-between hover:-translate-y-0.5 shadow-lg ${
+            metrics.critical_high_incidents > 0 ? 'border-amber-500/50 hover:border-amber-500/80 hover:shadow-amber-950/30' : 'border-navy-700/80 hover:border-royal/60 hover:shadow-glow-royal'
           }`}
         >
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-amber-500/80 to-transparent" />
           <div>
             <div className="flex items-center justify-between text-mutedslate mb-1">
-              <span className="text-xs font-medium uppercase font-mono">High / Critical Alerts</span>
-              <AlertTriangle className={`w-4 h-4 ${metrics.critical_high_incidents > 0 ? 'text-rose-400' : 'text-slate-400'}`} />
+              <span className="text-[11px] font-semibold uppercase font-mono tracking-wider">High / Critical Alerts</span>
+              <div className="w-8 h-8 rounded-lg bg-amber-500/15 flex items-center justify-center text-amber-300">
+                <AlertTriangle className="w-4 h-4" />
+              </div>
             </div>
-            <p className="text-2xl font-bold font-mono text-softwhite">{metrics.critical_high_incidents}</p>
-            <p className="text-[11px] text-mutedslate font-mono mt-0.5">
+            <p className="text-2xl font-black font-mono tracking-tight text-softwhite">{metrics.critical_high_incidents}</p>
+            <p className="text-[11px] text-mutedslate font-mono mt-0.5 font-medium">
               {metrics.critical_high_incidents > 0 ? 'Requires priority action' : 'No urgent alerts'}
             </p>
           </div>
@@ -403,15 +419,18 @@ export const Dashboard: React.FC = () => {
         {/* Card 4: AI Agents Available */}
         <div
           onClick={() => navigate('/agents')}
-          className="p-4 rounded-xl bg-navy-800 border border-slate-800 hover:border-royal/50 transition cursor-pointer flex flex-col justify-between"
+          className="relative overflow-hidden p-5 rounded-2xl bg-navy-800 border border-navy-700/80 hover:border-purple-500/60 hover:shadow-glow-purple transition-all duration-200 cursor-pointer flex flex-col justify-between hover:-translate-y-0.5 shadow-lg"
         >
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-purple-500/80 to-transparent" />
           <div>
             <div className="flex items-center justify-between text-mutedslate mb-1">
-              <span className="text-xs font-medium uppercase font-mono">AI Agents Available</span>
-              <Bot className="w-4 h-4 text-royal-300" />
+              <span className="text-[11px] font-semibold uppercase font-mono tracking-wider">AI Agents</span>
+              <div className="w-8 h-8 rounded-lg bg-purple-500/15 flex items-center justify-center text-purple-300">
+                <Bot className="w-4 h-4" />
+              </div>
             </div>
-            <p className="text-2xl font-bold font-mono text-softwhite">{agentSummary.available} / {agentSummary.total}</p>
-            <p className="text-[11px] text-emerald-400 font-mono mt-0.5">
+            <p className="text-2xl font-black font-mono tracking-tight text-softwhite">{agentSummary.available} / {agentSummary.total}</p>
+            <p className="text-[11px] text-emerald-400 font-mono mt-0.5 font-medium">
               {agentSummary.investigating > 0 ? `${agentSummary.investigating} investigating` : 'All ready on standby'}
             </p>
           </div>
@@ -423,17 +442,20 @@ export const Dashboard: React.FC = () => {
         {/* Card 5: System Health */}
         <div
           onClick={() => navigate('/health-monitor')}
-          className="p-4 rounded-xl bg-navy-800 border border-slate-800 hover:border-royal/50 transition cursor-pointer flex flex-col justify-between"
+          className="relative overflow-hidden p-5 rounded-2xl bg-navy-800 border border-navy-700/80 hover:border-emerald-500/60 hover:shadow-emerald-950/20 transition-all duration-200 cursor-pointer flex flex-col justify-between hover:-translate-y-0.5 shadow-lg"
         >
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-emerald-500/80 to-transparent" />
           <div>
             <div className="flex items-center justify-between text-mutedslate mb-1">
-              <span className="text-xs font-medium uppercase font-mono">System Health</span>
-              <Activity className="w-4 h-4 text-emerald-400" />
+              <span className="text-[11px] font-semibold uppercase font-mono tracking-wider">System Health</span>
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center text-emerald-400">
+                <Activity className="w-4 h-4" />
+              </div>
             </div>
-            <p className="text-2xl font-bold font-mono text-softwhite">
+            <p className="text-2xl font-black font-mono tracking-tight text-softwhite">
               {isSystemWorking ? 'Online' : 'Attention'}
             </p>
-            <p className="text-[11px] text-emerald-400 font-mono mt-0.5">
+            <p className="text-[11px] text-emerald-400 font-mono mt-0.5 font-medium">
               {Object.values(systemHealth).filter((c) => c.status === 'Online').length}/6 services healthy
             </p>
           </div>
@@ -443,8 +465,18 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* 3. WHAT NEEDS YOUR ATTENTION? */}
-      <div className="p-5 rounded-2xl bg-navy-800 border border-slate-800 shadow-xl">
+      {/* 4. REAL-TIME TELEMETRY ANALYTICS & RISK GAUGE */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          <ActivityChart />
+        </div>
+        <div>
+          <RiskGauge score={metrics.open_incidents > 0 ? 76 : 24} />
+        </div>
+      </div>
+
+      {/* 5. WHAT NEEDS YOUR ATTENTION? */}
+      <div className="p-5 rounded-2xl bg-navy-800 border border-navy-700/80 shadow-xl">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-base font-bold text-softwhite flex items-center space-x-2">
@@ -514,7 +546,7 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* 4. RECOMMENDED ADMINISTRATOR WORKFLOW */}
-      <div className="p-5 rounded-2xl bg-navy-800 border border-slate-800 shadow-xl">
+      <div className="p-5 rounded-2xl bg-navy-800 border border-navy-700/80 shadow-xl">
         <div className="mb-4">
           <h2 className="text-base font-bold text-softwhite flex items-center space-x-2">
             <ShieldCheck className="w-5 h-5 text-royal-300" />
@@ -649,7 +681,7 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* 5. SIMPLE SECURITY ACTIVITY (Readable Table with Plain English Labels) */}
-      <div className="p-5 rounded-2xl bg-navy-800 border border-slate-800 shadow-xl">
+      <div className="p-5 rounded-2xl bg-navy-800 border border-navy-700/80 shadow-xl">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-navy-700/80 gap-3">
           <div>
             <h2 className="text-base font-bold text-softwhite flex items-center space-x-2">
@@ -748,7 +780,7 @@ export const Dashboard: React.FC = () => {
       {/* 6. TWO-COLUMN ROW: SIMPLE AI AGENT OVERVIEW & SIMPLE SYSTEM HEALTH */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Simple AI Agent Overview */}
-        <div className="p-5 rounded-2xl bg-navy-800 border border-slate-800 shadow-xl flex flex-col justify-between">
+        <div className="p-5 rounded-2xl bg-navy-800 border border-navy-700/80 shadow-xl flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-navy-700/80 mb-4">
               <div>
@@ -827,7 +859,7 @@ export const Dashboard: React.FC = () => {
         </div>
 
         {/* Simple System Health */}
-        <div className="p-5 rounded-2xl bg-navy-800 border border-slate-800 shadow-xl flex flex-col justify-between">
+        <div className="p-5 rounded-2xl bg-navy-800 border border-navy-700/80 shadow-xl flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-navy-700/80 mb-4">
               <div>

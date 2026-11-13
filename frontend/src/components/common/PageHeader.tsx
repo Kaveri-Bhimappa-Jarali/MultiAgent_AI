@@ -38,7 +38,9 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   }[badgeVariant];
 
   return (
-    <div className="p-5 rounded-2xl bg-navy-850 border border-navy-700/80 shadow-xl mb-6">
+    <div className="relative overflow-hidden p-5 rounded-2xl bg-navy-800 border border-navy-700/80 shadow-xl mb-6">
+      {/* Subtle top accent bar */}
+      <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-royal/70 to-transparent" />
       <div className="flex flex-col lg:flex-row lg:items-center justify-between pb-3 border-b border-navy-700/60 gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-2.5">

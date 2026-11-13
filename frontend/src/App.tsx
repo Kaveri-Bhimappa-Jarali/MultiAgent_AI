@@ -21,6 +21,8 @@ import { Reports } from './pages/Reports';
 import { Settings } from './pages/Settings';
 import { IngestionHealth } from './pages/IngestionHealth';
 import { VirtualLab } from './pages/VirtualLab';
+import { Correlation } from './pages/Correlation';
+import { AIAnalysis } from './pages/AiAnalysis';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading } = useAuth();
@@ -63,6 +65,8 @@ export const App: React.FC = () => {
             >
               <Route index element={<Dashboard />} />
               <Route path="events" element={<Events />} />
+              <Route path="correlation" element={<Correlation />} />
+              <Route path="ai-analysis" element={<AIAnalysis />} />
               <Route path="ingestion" element={<Ingestion />} />
               <Route path="health-monitor" element={<IngestionHealth />} />
               <Route path="detections" element={<Detections />} />

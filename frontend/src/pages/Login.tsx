@@ -35,11 +35,21 @@ export const Login: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-midnight flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Background radial effects */}
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-royal/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-gold/5 rounded-full blur-3xl pointer-events-none" />
+      {/* Ambient glow — purple top-left */}
+      <div
+        className="absolute top-0 left-0 w-[700px] h-[500px] opacity-20 blur-[130px] pointer-events-none -z-10"
+        style={{ background: 'radial-gradient(circle at 20% 10%, #6D5AE6 0%, #8b5cf6 35%, transparent 70%)' }}
+      />
+      {/* Ambient glow — gold bottom-right */}
+      <div
+        className="absolute bottom-0 right-0 w-[500px] h-[400px] opacity-10 blur-[120px] pointer-events-none -z-10"
+        style={{ background: 'radial-gradient(circle at 80% 90%, #D8B875 0%, transparent 65%)' }}
+      />
 
-      <div className="w-full max-w-md bg-navy-800 border border-slate-700/80 rounded-2xl p-8 shadow-2xl relative z-10">
+      <div className="w-full max-w-md relative z-10">
+        {/* Card with top glow bar */}
+        <div className="relative overflow-hidden bg-navy-800 border border-navy-700/80 rounded-2xl p-8 shadow-[0_0_60px_rgba(0,0,0,0.6)]">
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-royal/80 to-transparent" />
         {/* Brand */}
         <div className="flex flex-col items-center text-center mb-8">
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-royal to-purple-800 flex items-center justify-center shadow-xl shadow-royal/30 mb-3 border border-royal/40">
@@ -119,6 +129,7 @@ export const Login: React.FC = () => {
               <div className="text-xs font-semibold text-royal-200">SOC Analyst</div>
               <div className="text-[10px] text-mutedslate font-mono">analyst / Analyst@SOC2026!</div>
             </button>
+          </div>
           </div>
         </div>
       </div>

@@ -86,19 +86,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
 
   return (
     <aside
-      className={`fixed top-0 left-0 z-40 h-screen transition-all duration-300 bg-navy-900 border-r border-navy-700/80 flex flex-col ${
+      className={`fixed top-0 left-0 z-40 h-screen transition-all duration-300 bg-navy-950/95 backdrop-blur-md border-r border-navy-700/60 flex flex-col shadow-[4px_0_24px_rgba(0,0,0,0.5)] ${
         collapsed ? 'w-20' : 'w-64'
       }`}
     >
       {/* Brand Header */}
-      <div className="h-16 flex items-center justify-between px-4 border-b border-navy-700/80 bg-navy-950/70 flex-shrink-0">
+      <div className="h-16 flex items-center justify-between px-4 border-b border-navy-700/60 bg-navy-950/70 flex-shrink-0">
         <div className="flex items-center space-x-3 overflow-hidden">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-royal to-purple-800 flex items-center justify-center shadow-lg shadow-royal/20 flex-shrink-0">
-            <ShieldAlert className="w-6 h-6 text-gold" />
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-royal via-purple-600 to-purple-800 flex items-center justify-center shadow-[0_0_16px_rgba(109,90,230,0.4)] border border-royal/40 flex-shrink-0">
+            <ShieldAlert className="w-6 h-6 text-white" />
           </div>
           {!collapsed && (
             <div className="flex flex-col truncate">
-              <span className="font-bold text-sm text-softwhite tracking-wide font-sans">ROYAL SOC</span>
+              <span className="font-black text-sm text-transparent bg-clip-text bg-gradient-to-r from-royal-200 to-purple-300 tracking-wider">ROYAL SOC</span>
               <span className="text-[10px] text-gold tracking-widest font-mono uppercase">Multi-Agent AI</span>
             </div>
           )}
@@ -141,8 +141,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
                   to={item.to}
                   className={`flex items-center space-x-3 px-3 py-2 rounded-xl font-medium text-xs transition-all duration-150 ${
                     isCurrent
-                      ? 'bg-royal/20 text-softwhite border border-royal/40 shadow-sm shadow-royal/10 font-semibold'
-                      : 'text-mutedslate hover:text-softwhite hover:bg-navy-800/80'
+                      ? 'nav-active'
+                      : 'nav-idle'
                   } ${collapsed ? 'justify-center px-0' : ''}`}
                   title={collapsed ? `${section.title}: ${item.label}` : item.description}
                 >

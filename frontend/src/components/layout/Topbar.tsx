@@ -16,7 +16,7 @@ export const Topbar: React.FC<TopbarProps> = ({ sidebarCollapsed }) => {
 
   return (
     <header
-      className={`fixed top-0 right-0 z-30 h-16 transition-all duration-300 bg-navy-900/90 backdrop-blur-md border-b border-navy-700/80 flex items-center justify-between px-6 ${
+      className={`fixed top-0 right-0 z-30 h-16 transition-all duration-300 bg-navy-950/90 backdrop-blur-md border-b border-navy-700/60 flex items-center justify-between px-6 shadow-[0_4px_24px_rgba(0,0,0,0.5)] ${
         sidebarCollapsed ? 'left-20' : 'left-64'
       }`}
     >
