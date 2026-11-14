@@ -2,9 +2,41 @@
 
 **Authors:** Deepak, Isha U Prabhu, Ishank Kumar, Kaveri Jarali  
 **Repository:** https://github.com/Kaveri-Bhimappa-Jarali/MultiAgent_AI  
-**Last Updated:** 2026-11-02
+**Last Updated:** 2026-11-14
 
 ---
+
+## Connected VM Lab
+
+The two cloud VMs are configured and verified. See [current deployment and service commands](docs/VM_LAB_CURRENT_SETUP.md). The active dashboard uses `soc-frontend/` at http://127.0.0.1:3000, with API and WebSocket traffic proxied to the backend on port 8000.
+
+| Role | Public SSH address | Private lab address |
+|:---|:---|:---|
+| Victim / Nginx | 45.74.156.43 | 10.0.0.11 |
+| Attacker | 45.74.156.44 | 10.0.0.12 |
+
+The installed user services already run the backend, dashboard, and both telemetry tunnels. Stop those services before using the manual launch commands below.
+
+## Backend commands for the current checkout
+
+The backend and VM tunnels are installed as user services. After switching branches, reload the backend from the current checkout:
+
+```bash
+systemctl --user restart soc-lab-backend
+systemctl --user start soc-lab-tunnel-victim soc-lab-tunnel-attacker
+curl http://127.0.0.1:8000/health
+```
+
+To run the backend manually with live reload, stop its service first. Leave the two tunnel services running:
+
+```bash
+cd /home/ishank/ishank_github/MultiAgent_AI
+source /home/ishank/.venv/bin/activate
+systemctl --user stop soc-lab-backend
+python -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000 --reload
+```
+
+After stopping the manual process with Ctrl+C, restore the background backend with `systemctl --user start soc-lab-backend`.
 
 ## Current Repository State (After Merge)
 
@@ -19,8 +51,8 @@ The `main` branch now contains the **merged result of all team branches**:
 | `93e28df` | Origin/main | Dashboard update baseline |
 
 > **Two separate frontends exist in this repo:**
-> - **`frontend/`** — The main production TypeScript React dashboard (use this one)
-> - **`soc-frontend/`** — Deepak's alternative Sentinel SOC dashboard (standalone JSX app)
+> - **`soc-frontend/`** — The active Sentinel SOC dashboard connected to the VM lab.
+> - **`frontend/`** — The alternative TypeScript React dashboard.
 
 ---
 
@@ -56,16 +88,16 @@ INFO:     [EventQueue] Real-time detection & agent worker loop started.
 
 ---
 
-### Terminal 2 — Main Frontend (TypeScript React / Vite)
+### Terminal 2 — Active SOC Frontend (React / Vite)
 
 ```bash
-cd /home/ishank/ishank_github/MultiAgent_AI/frontend
+cd /home/ishank/ishank_github/MultiAgent_AI/soc-frontend
 
 npm install     # only needed once / after package changes
 npm run dev
 ```
 
-**Dashboard live at:** http://localhost:3000 (or http://localhost:5173)
+**Dashboard service:** http://localhost:3000. A manual `npm run dev` inside `soc-frontend/` uses http://localhost:5173. Both proxy to the same backend.
 
 **Login credentials:**
 
@@ -76,13 +108,13 @@ npm run dev
 
 ---
 
-### Terminal 3 — (Optional) Deepak's Sentinel SOC Frontend
+### Terminal 3 — (Optional) Alternative TypeScript Frontend
 
 ```bash
-cd /home/ishank/ishank_github/MultiAgent_AI/soc-frontend
+cd /home/ishank/ishank_github/MultiAgent_AI/frontend
 
 npm install
-npm run dev   # runs on a different port, e.g. 5174
+npm run dev -- --port 3001
 ```
 
 Connects to the same backend at `http://127.0.0.1:8000`.
@@ -105,15 +137,15 @@ LLM_PROVIDER=local
 GEMINI_API_KEY=    # Put Gemini key HERE, NOT in config.py
 
 # Attacker VM
-ATTACKER_VM_HOST=45.74.156.31
-ATTACKER_VM_PRIVATE_IP=10.0.0.13
+ATTACKER_VM_HOST=45.74.156.44
+ATTACKER_VM_PRIVATE_IP=10.0.0.12
 ATTACKER_VM_USER=ubuntu
 ATTACKER_VM_SSH_PORT=22
 ATTACKER_VM_SSH_KEY_PATH=/home/ishank/.ssh/id_ed25519
 
 # Victim VM
-VICTIM_VM_HOST=45.74.156.69
-VICTIM_VM_PRIVATE_IP=10.0.0.14
+VICTIM_VM_HOST=45.74.156.43
+VICTIM_VM_PRIVATE_IP=10.0.0.11
 VICTIM_VM_USER=ubuntu
 VICTIM_VM_SSH_PORT=22
 VICTIM_VM_INTERFACE=eth0
@@ -122,7 +154,7 @@ VICTIM_VM_INTERFACE=eth0
 ATTACK_SIMULATION_ENABLED=true
 ATTACK_SIMULATION_MAX_CONCURRENT=1
 ATTACK_SIMULATION_TIMEOUT=300
-ATTACK_SIMULATION_ALLOWED_TARGETS=10.0.0.14
+ATTACK_SIMULATION_ALLOWED_TARGETS=10.0.0.11
 ```
 
 > WARNING: Gemini API key is currently hardcoded in `backend/app/config.py` line 27.
@@ -135,7 +167,7 @@ ATTACK_SIMULATION_ALLOWED_TARGETS=10.0.0.14
 ### Architecture
 
 ```
-Attacker VM (45.74.156.31)
+Attacker VM (45.74.156.44)
      |  SSH via backend subprocess
      v
 SOC Backend (localhost:8000)
@@ -143,7 +175,7 @@ SOC Backend (localhost:8000)
      |-- GET  /api/simulation/status
      |-- GET  /api/simulation/scenarios
      v
-Victim VM (45.74.156.69 -> 10.0.0.14)
+Victim VM (45.74.156.43 -> 10.0.0.11)
      |  Guest agent sends telemetry back
      v
 SOC Detection Pipeline -> ML Findings -> Incidents -> SOAR
@@ -209,22 +241,21 @@ After injecting, watch in the dashboard:
 
 ---
 
-## Live VM Tunnel
+## Live VM Tunnels
+
+The installed `soc-lab-tunnel-victim` and `soc-lab-tunnel-attacker` user services keep the tunnels running and reconnect after failures. Each VM's `127.0.0.1:18000` forwards to the local backend's `127.0.0.1:8000`. The victim collector uses Nginx on `127.0.0.1:8000` as its telemetry proxy.
+
+To run a tunnel manually, first stop its corresponding user service:
 
 ```bash
-chmod +x scripts/start_vm_tunnel.sh
-./scripts/start_vm_tunnel.sh   # keep this terminal open
+systemctl --user stop soc-lab-tunnel-victim
+./scripts/start_vm_tunnel.sh victim
+# In another terminal, if needed:
+# systemctl --user stop soc-lab-tunnel-attacker
+# ./scripts/start_vm_tunnel.sh attacker
 ```
 
-Creates: `VM localhost:8000 <--- forwards to --- your localhost:8000`
-
-Then on the victim VM (45.74.156.69):
-```bash
-python3 vm_telemetry_collector.py \
-  --soc-host http://localhost:8000 \
-  --vm-id vm-endpoint-01 \
-  --api-key VM-KEY-ENDPOINT-SEC-2026
-```
+The script reads VM addresses and the SSH key path from the backend settings, including `.env`. Guest collectors run as `soc-agent.service` on both VMs. Their authentication keys are stored in `/etc/soc-agent.env` with mode 0600 and in the local SOC database.
 
 ---
 

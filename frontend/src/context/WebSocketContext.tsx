@@ -10,6 +10,8 @@ interface WebSocketContextType {
   reconnect: () => void;
 }
 
+const WebSocketSubscriptionContext = createContext<WebSocketContextType['subscribe'] | null>(null);
+
 const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined);
 
 export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -168,7 +170,9 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         reconnect
       }}
     >
-      {children}
+      <WebSocketSubscriptionContext.Provider value={subscribe}>
+        {children}
+      </WebSocketSubscriptionContext.Provider>
     </WebSocketContext.Provider>
   );
 };
@@ -179,4 +183,12 @@ export const useWebSocket = () => {
     throw new Error('useWebSocket must be used within a WebSocketProvider');
   }
   return context;
+};
+
+
+// Consumers that only subscribe do not need to rerender on every socket timestamp.
+export const useWebSocketSubscription = () => {
+  const subscribe = useContext(WebSocketSubscriptionContext);
+  if (!subscribe) throw new Error('useWebSocketSubscription requires WebSocketProvider');
+  return subscribe;
 };

@@ -57,7 +57,7 @@ export const AttackSimulation: React.FC = () => {
   // Launch Dialog Modal
   const [selectedScenario, setSelectedScenario] = useState<SimulationScenario | null>(null);
   const [configParams, setConfigParams] = useState<Record<string, any>>({});
-  const [targetIp, setTargetIp] = useState<string>('10.0.0.14');
+  const [targetIp, setTargetIp] = useState<string>('');
   const [launching, setLaunching] = useState<boolean>(false);
   const [launchError, setLaunchError] = useState<string | null>(null);
 
@@ -69,78 +69,96 @@ export const AttackSimulation: React.FC = () => {
   const [inspectExecution, setInspectExecution] = useState<SimulationExecution | null>(null);
 
   const { subscribe } = useWebSocket();
-  const terminalEndRef = useRef<HTMLDivElement>(null);
+  const terminalRef = useRef<HTMLDivElement>(null);
+  const followLogsRef = useRef(true);
+  const executionRef = useRef<SimulationExecution | null>(null);
+  const historyBusy = useRef(false);
+  const lastLogsSnapshotRef = useRef('');
+  const connectivityBusy = useRef(false);
+  const [pageError, setPageError] = useState('');
 
-  // Auto scroll terminal
+  const appendLog = useCallback((line: string) => {
+    setLiveLogs(prev => [...prev.slice(-999), line]);
+  }, []);
+
+  // Scroll only the terminal, and leave the reader's position alone when scrolled up.
   useEffect(() => {
-    if (terminalEndRef.current) {
-      terminalEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
+    const terminal = terminalRef.current;
+    if (terminal && followLogsRef.current) terminal.scrollTop = terminal.scrollHeight;
   }, [liveLogs]);
 
-  // Initial Data Fetch
-  const fetchAll = useCallback(async (isSilent = false) => {
-    if (!isSilent) setLoading(true);
+  const fetchAll = useCallback(async (_isSilent = false) => {
+    if (historyBusy.current) return;
+    historyBusy.current = true;
     try {
-      const [st, sc, ex] = await Promise.all([
-        api.getSimulationStatus(),
-        api.getSimulationScenarios(),
-        api.getSimulationExecutions(20)
-      ]);
-      setStatus(st);
-      setScenarios(sc || []);
+      const ex: SimulationExecution[] = await api.getSimulationExecutions(20);
       setExecutions(ex || []);
-
-      // Check if there is an active running execution
-      const running = (ex || []).find((e: SimulationExecution) => e.status === 'RUNNING');
-      if (running) {
-        setActiveExecution(running);
-        if (running.raw_logs) {
-          setLiveLogs(running.raw_logs.split('\n'));
+      const currentId = executionRef.current?.execution_id;
+      const current = (ex || []).find(item => item.execution_id === currentId);
+      const next = (ex || []).find(item => item.status === 'RUNNING') || current ||
+        (executionRef.current?.status === 'RUNNING' ? executionRef.current : ex?.[0]) || null;
+      if (next) {
+        const changedRun = next.execution_id !== currentId;
+        executionRef.current = next;
+        setActiveExecution(next);
+        const logSnapshot = `${next.execution_id}:${next.raw_logs || ''}`;
+        if ((changedRun || next.status !== 'RUNNING') && logSnapshot !== lastLogsSnapshotRef.current) {
+          lastLogsSnapshotRef.current = logSnapshot;
+          setLiveLogs((next.raw_logs || '').split('\n').filter(Boolean).slice(-1000));
         }
       }
-    } catch (err) {
-      console.error('Failed to fetch attack simulation data', err);
+      setPageError('');
+    } catch (err: any) {
+      setPageError(err.message || 'Cannot load simulation history.');
     } finally {
-      if (!isSilent) setLoading(false);
+      historyBusy.current = false;
+      setLoading(false);
+    }
+  }, []);
+
+  const verifyInfrastructure = useCallback(async () => {
+    if (connectivityBusy.current) return;
+    connectivityBusy.current = true;
+    setStatusRefreshing(true);
+    try {
+      setStatus(await api.getSimulationStatus());
+    } catch (err: any) {
+      setPageError(err.message || 'Infrastructure check failed.');
+    } finally {
+      connectivityBusy.current = false;
       setStatusRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
     fetchAll();
-    const interval = setInterval(() => fetchAll(true), 15000);
+    verifyInfrastructure();
+    api.getSimulationScenarios().then(setScenarios).catch(err => setPageError(err.message));
+    const interval = setInterval(() => {
+      if (!document.hidden) fetchAll(true);
+    }, 5000);
     return () => clearInterval(interval);
-  }, [fetchAll]);
+  }, [fetchAll, verifyInfrastructure]);
 
   // WebSocket Live Subscriptions
   useEffect(() => {
     const unsubStarted = subscribe('SIMULATION_STARTED', (data: any) => {
+      if (executionRef.current?.execution_id !== data.execution_id) {
+        setLiveLogs([]);
+        setLatestLLMAnalysis(null);
+      }
       fetchAll(true);
-      setLiveLogs((prev) => [...prev, `[SYSTEM] 🚀 Simulation ${data.scenario_name} (${data.execution_id}) started.`]);
     });
 
     const unsubLog = subscribe('SIMULATION_LOG', (data: any) => {
-      if (data && data.line) {
-        setLiveLogs((prev) => [...prev, data.line]);
-      }
+      if (data?.line && data.execution_id === executionRef.current?.execution_id) appendLog(data.line);
     });
 
-    const unsubCompleted = subscribe('SIMULATION_COMPLETED', (data: any) => {
-      fetchAll(true);
-      setLiveLogs((prev) => [
-        ...prev,
-        `[SYSTEM] 🏁 Simulation ${data.execution_id} COMPLETED. Events: ${data.events_detected || 0}, Findings: ${data.findings_count || 0}`
-      ]);
-    });
-
-    const unsubStopped = subscribe('SIMULATION_STOPPED', (data: any) => {
-      fetchAll(true);
-      setLiveLogs((prev) => [...prev, `[SYSTEM] 🛑 Simulation ${data.execution_id} STOPPED by operator.`]);
-    });
+    const unsubCompleted = subscribe('SIMULATION_COMPLETED', () => fetchAll(true));
+    const unsubStopped = subscribe('SIMULATION_STOPPED', () => fetchAll(true));
 
     const unsubLLM = subscribe('LLM_ANALYSIS_COMPLETED', (data: any) => {
-      if (data && data.analysis) {
+      if (data?.analysis && data.action?.incident_id === executionRef.current?.associated_incident_id) {
         setLatestLLMAnalysis(data.analysis);
         setLiveLogs((prev) => [
           ...prev,
@@ -151,13 +169,8 @@ export const AttackSimulation: React.FC = () => {
     });
 
     const unsubAction = subscribe('RESPONSE_ACTION_UPDATED', (data: any) => {
-      if (latestLLMAnalysis) {
-        setLatestLLMAnalysis((prev: any) => prev ? { ...prev, response_status: data.status, action_decision: data.decision } : null);
-      }
-      setLiveLogs((prev) => [
-        ...prev,
-        `[SYSTEM] 🛡️ Response Action ${data.action_id} updated: ${data.status} (Decision: ${data.decision || 'Updated'}) by ${data.actor}`
-      ]);
+      setLatestLLMAnalysis((prev: any) => prev?.action_id === data.action_id
+        ? { ...prev, response_status: data.status, action_decision: data.decision } : prev);
     });
 
     return () => {
@@ -168,7 +181,7 @@ export const AttackSimulation: React.FC = () => {
       unsubLLM();
       unsubAction();
     };
-  }, [subscribe, fetchAll, latestLLMAnalysis]);
+  }, [subscribe, fetchAll, appendLog]);
 
   const handleAllowAction = async (actionId: string) => {
     try {
@@ -206,7 +219,7 @@ export const AttackSimulation: React.FC = () => {
   const handleOpenLaunch = (scenario: SimulationScenario) => {
     setSelectedScenario(scenario);
     setConfigParams({ ...scenario.default_parameters });
-    setTargetIp(status?.victim_vm?.private_ip || '10.0.0.14');
+    setTargetIp(status?.victim_vm?.private_ip || status?.allowed_targets?.[0] || '');
     setLaunchError(null);
   };
 
@@ -220,6 +233,9 @@ export const AttackSimulation: React.FC = () => {
         target_ip: targetIp,
         parameters: configParams
       });
+      executionRef.current = res;
+      followLogsRef.current = true;
+      setLatestLLMAnalysis(null);
       setActiveExecution(res);
       setLiveLogs([`[SYSTEM] Dispatched simulation '${selectedScenario.name}' (${res.execution_id}) against ${targetIp}`]);
       setSelectedScenario(null);
@@ -274,8 +290,7 @@ export const AttackSimulation: React.FC = () => {
         <div className="flex items-center space-x-3 self-end md:self-auto">
           <button
             onClick={() => {
-              setStatusRefreshing(true);
-              fetchAll();
+              verifyInfrastructure();
             }}
             disabled={statusRefreshing}
             className="flex items-center space-x-2 px-3 py-2 rounded-xl bg-navy-800 hover:bg-navy-700 text-softwhite border border-navy-600 text-xs font-medium transition"
@@ -286,6 +301,8 @@ export const AttackSimulation: React.FC = () => {
         </div>
       </div>
 
+      {pageError && <p role="alert" className="p-3 rounded-xl border border-amber-400/30 text-amber-200 text-xs">{pageError}</p>}
+      {loading && <p role="status" className="text-xs text-mutedslate">Loading simulations…</p>}
       {/* VM Topology & Dynamic Connectivity Card */}
       <div className="bg-navy-900/90 border border-navy-700/80 rounded-2xl p-5 shadow-xl">
         <div className="flex items-center justify-between mb-4 border-b border-navy-700/60 pb-3">
@@ -298,7 +315,7 @@ export const AttackSimulation: React.FC = () => {
           <div className="flex items-center space-x-2">
             <span className="text-xs text-mutedslate">Safety Allowlist:</span>
             <span className="font-mono text-xs px-2 py-0.5 rounded bg-navy-950 text-gold border border-navy-700">
-              {(status?.allowed_targets || ['10.0.0.14']).join(', ')}
+              {(status?.allowed_targets || ['—']).join(', ')}
             </span>
           </div>
         </div>
@@ -322,7 +339,7 @@ export const AttackSimulation: React.FC = () => {
                 </span>
               ) : (
                 <span className="flex items-center text-[10px] font-mono text-crimson bg-crimson/20 px-2 py-0.5 rounded-full border border-crimson/30">
-                  <WifiOff className="w-3 h-3 mr-1" /> UNREACHABLE
+                  <WifiOff className="w-3 h-3 mr-1" /> {status ? 'UNREACHABLE' : 'CHECKING'}
                 </span>
               )}
             </div>
@@ -330,28 +347,28 @@ export const AttackSimulation: React.FC = () => {
             <div className="mt-3 space-y-1 text-[11px] font-mono text-mutedslate border-t border-navy-800/80 pt-2.5">
               <div className="flex justify-between">
                 <span>Public IP:</span>
-                <span className="text-softwhite">{status?.attacker_vm?.host || '45.74.156.31'}</span>
+                <span className="text-softwhite">{status?.attacker_vm?.host || '—'}</span>
               </div>
               <div className="flex justify-between">
                 <span>Private IP (eth0):</span>
-                <span className="text-softwhite font-bold">{status?.attacker_vm?.private_ip || '10.0.0.13'}</span>
+                <span className="text-softwhite font-bold">{status?.attacker_vm?.private_ip || '—'}</span>
               </div>
               <div className="flex justify-between">
                 <span>SSH Port / Latency:</span>
-                <span className="text-softwhite">Port 22 ({status?.attacker_vm?.latency_ms ? `${status.attacker_vm.latency_ms}ms` : '4ms'})</span>
+                <span className="text-softwhite">Port 22 ({status?.attacker_vm?.latency_ms ? `${status.attacker_vm.latency_ms}ms` : 'checking'})</span>
               </div>
             </div>
 
             {/* Tools installed chips */}
             <div className="mt-3 pt-2.5 border-t border-navy-800/80 flex flex-wrap gap-1.5">
-              {Object.entries(status?.tools_installed || { nmap: true, curl: true, python3: true, nc: true }).map(([tool, ready]) => (
+              {Object.entries(status?.tools_installed || { nmap: false, curl: false, python3: false, nc: false }).map(([tool, ready]) => (
                 <span
                   key={tool}
                   className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
                     ready ? 'bg-emerald-950/40 text-emerald-400 border-emerald-500/30' : 'bg-crimson/20 text-crimson border-crimson/30'
                   }`}
                 >
-                  ✓ {tool}
+                  {ready ? '✓' : '–'} {tool}
                 </span>
               ))}
             </div>
@@ -367,7 +384,7 @@ export const AttackSimulation: React.FC = () => {
             <div className="mt-2 text-[11px] text-mutedslate">
               {status?.private_network_reachability ? (
                 <span className="text-emerald-400 flex items-center justify-center gap-1 font-mono">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Isolated Private Route Active (&lt;1ms)
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Private route verified
                 </span>
               ) : (
                 <span className="text-gold flex items-center justify-center gap-1 font-mono">
@@ -376,7 +393,7 @@ export const AttackSimulation: React.FC = () => {
               )}
             </div>
             <p className="text-[10px] text-mutedslate/70 mt-1 max-w-xs">
-              Attacks originating from the Attacker VM strictly target the Victim VM's private IP (10.0.0.14) over the internal VPC.
+              Attacks originating from the Attacker VM strictly target the Victim VM's private IP ({status?.victim_vm?.private_ip || 'checking target'}) over the internal VPC.
             </p>
           </div>
 
@@ -398,7 +415,7 @@ export const AttackSimulation: React.FC = () => {
                 </span>
               ) : (
                 <span className="flex items-center text-[10px] font-mono text-crimson bg-crimson/20 px-2 py-0.5 rounded-full border border-crimson/30">
-                  <WifiOff className="w-3 h-3 mr-1" /> UNREACHABLE
+                  <WifiOff className="w-3 h-3 mr-1" /> {status ? 'UNREACHABLE' : 'CHECKING'}
                 </span>
               )}
             </div>
@@ -406,11 +423,11 @@ export const AttackSimulation: React.FC = () => {
             <div className="mt-3 space-y-1 text-[11px] font-mono text-mutedslate border-t border-navy-800/80 pt-2.5">
               <div className="flex justify-between">
                 <span>Public IP:</span>
-                <span className="text-softwhite">{status?.victim_vm?.host || '45.74.156.69'}</span>
+                <span className="text-softwhite">{status?.victim_vm?.host || '—'}</span>
               </div>
               <div className="flex justify-between">
                 <span>Private Target IP:</span>
-                <span className="text-emerald-400 font-bold">{status?.victim_vm?.private_ip || '10.0.0.14'}</span>
+                <span className="text-emerald-400 font-bold">{status?.victim_vm?.private_ip || '—'}</span>
               </div>
               <div className="flex justify-between">
                 <span>Exposed Services:</span>
@@ -563,7 +580,7 @@ export const AttackSimulation: React.FC = () => {
               <div className="p-3 rounded-lg bg-navy-900/80 border border-slate-800 space-y-2">
                 <div className="text-[10px] text-mutedslate uppercase font-semibold flex items-center justify-between">
                   <span>SOAR Containment Decision</span>
-                  <span className="text-royal-300">{latestLLMAnalysis.action_type || 'BLOCK_IP'} → {latestLLMAnalysis.target_value || '10.0.0.13'}</span>
+                  <span className="text-royal-300">{latestLLMAnalysis.action_type || 'BLOCK_IP'} → {latestLLMAnalysis.target_value || '—'}</span>
                 </div>
 
                 {latestLLMAnalysis.response_status === 'AUTONOMOUSLY_CONTAINED' || latestLLMAnalysis.response_status === 'EXECUTED' ? (
@@ -608,7 +625,10 @@ export const AttackSimulation: React.FC = () => {
         )}
 
         {/* Live Terminal Output Box */}
-        <div className="h-64 overflow-y-auto bg-navy-950 border border-navy-800 rounded-xl p-3 font-mono text-[11px] space-y-1 select-text">
+        <div ref={terminalRef} onScroll={event => {
+          const terminal = event.currentTarget;
+          followLogsRef.current = terminal.scrollHeight - terminal.scrollTop - terminal.clientHeight < 32;
+        }} aria-label="Simulation terminal" className="h-64 overflow-y-auto overscroll-contain bg-navy-950 border border-navy-800 rounded-xl p-3 font-mono text-[11px] space-y-1 select-text">
           {liveLogs.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-mutedslate">
               <Terminal className="w-8 h-8 mb-2 opacity-30" />
@@ -634,7 +654,7 @@ export const AttackSimulation: React.FC = () => {
               );
             })
           )}
-          <div ref={terminalEndRef} />
+
         </div>
       </div>
 
@@ -697,11 +717,11 @@ export const AttackSimulation: React.FC = () => {
 
               <div className="mt-4 pt-3 border-t border-navy-800/80 flex items-center justify-between">
                 <span className="text-[10px] font-mono text-mutedslate">
-                  Target: <span className="text-softwhite">10.0.0.14</span>
+                  Target: <span className="text-softwhite">{status?.victim_vm?.private_ip || 'Checking…'}</span>
                 </span>
                 <button
                   onClick={() => handleOpenLaunch(sc)}
-                  disabled={activeExecution?.status === 'RUNNING'}
+                  disabled={activeExecution?.status === 'RUNNING' || !status?.all_ready}
                   className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-royal hover:bg-royal/80 disabled:opacity-50 disabled:cursor-not-allowed text-softwhite text-xs font-semibold shadow-md shadow-royal/20 transition"
                 >
                   <Play className="w-3.5 h-3.5" />
@@ -816,7 +836,7 @@ export const AttackSimulation: React.FC = () => {
               </div>
               <div className="flex justify-between font-mono">
                 <span className="text-mutedslate">Origin Host:</span>
-                <span className="text-crimson font-bold">Attacker VM ({status?.attacker_vm?.host || '45.74.156.31'} / {status?.attacker_vm?.private_ip || '10.0.0.13'})</span>
+                <span className="text-crimson font-bold">Attacker VM ({status?.attacker_vm?.host || '—'} / {status?.attacker_vm?.private_ip || '—'})</span>
               </div>
               <div className="flex justify-between font-mono">
                 <span className="text-mutedslate">Private Target:</span>
@@ -826,15 +846,15 @@ export const AttackSimulation: React.FC = () => {
 
             {/* Target IP Input (Strictly allowlisted) */}
             <div>
-              <label className="block text-xs font-semibold text-mutedslate mb-1">
+              <label htmlFor="simulation-target" className="block text-xs font-semibold text-mutedslate mb-1">
                 Target Private IP (VPC Restricted)
               </label>
-              <select
+              <select id="simulation-target"
                 value={targetIp}
                 onChange={(e) => setTargetIp(e.target.value)}
                 className="w-full bg-navy-950 border border-navy-700 rounded-xl px-3 py-2 text-xs text-softwhite font-mono focus:outline-none focus:border-royal"
               >
-                {(status?.allowed_targets || ['10.0.0.14']).map((t) => (
+                {(status?.allowed_targets || ['—']).map((t) => (
                   <option key={t} value={t}>
                     {t} (Victim VM eth0)
                   </option>
@@ -846,20 +866,22 @@ export const AttackSimulation: React.FC = () => {
             {Object.entries(selectedScenario.parameter_schema).map(([key, schema]: [string, any]) => (
               <div key={key}>
                 <div className="flex justify-between text-xs mb-1">
-                  <label className="font-semibold text-mutedslate capitalize">{key.replace('_', ' ')}</label>
+                  <label htmlFor={`simulation-param-${key}`} className="font-semibold text-mutedslate capitalize">{key.replace(/_/g, ' ')}</label>
                   <span className="text-[10px] text-mutedslate font-mono">{schema.description}</span>
                 </div>
-                <input
+                {schema.enum ? <select id={`simulation-param-${key}`} value={configParams[key] ?? schema.default}
+                  onChange={event => setConfigParams(prev => ({ ...prev, [key]: event.target.value }))}
+                  className="w-full bg-navy-950 border border-navy-700 rounded-xl px-3 py-2 text-xs text-softwhite font-mono">
+                  {schema.enum.map((option: string) => <option key={option} value={option}>{option}</option>)}
+                </select> : <input
+                  id={`simulation-param-${key}`}
                   type={schema.type === 'integer' ? 'number' : 'text'}
                   value={configParams[key] ?? schema.default}
                   min={schema.min}
                   max={schema.max}
-                  onChange={(e) => {
-                    const val = schema.type === 'integer' ? parseInt(e.target.value, 10) : e.target.value;
-                    setConfigParams({ ...configParams, [key]: val });
-                  }}
+                  onChange={event => setConfigParams(prev => ({ ...prev, [key]: schema.type === 'integer' ? Number(event.target.value) : event.target.value }))}
                   className="w-full bg-navy-950 border border-navy-700 rounded-xl px-3 py-2 text-xs text-softwhite font-mono focus:outline-none focus:border-royal"
-                />
+                />}
               </div>
             ))}
 
@@ -885,7 +907,7 @@ export const AttackSimulation: React.FC = () => {
               <button
                 type="button"
                 onClick={handleConfirmLaunch}
-                disabled={launching}
+                disabled={launching || !targetIp || !status?.allowed_targets.includes(targetIp)}
                 className="flex items-center space-x-2 px-5 py-2 rounded-xl bg-crimson hover:bg-crimson/80 text-white text-xs font-bold shadow-lg shadow-crimson/20 transition disabled:opacity-50"
               >
                 <Play className="w-3.5 h-3.5" />

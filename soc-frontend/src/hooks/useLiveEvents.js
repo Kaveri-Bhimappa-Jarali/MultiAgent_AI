@@ -77,8 +77,9 @@ export function useLiveEvents() {
         setIsLiveConnected(true)
 
         if (msg && typeof msg === 'object') {
-          if (msg.event || msg.type === 'NEW_EVENT' || msg.event_id) {
-            const raw = msg.event || msg
+          if (msg.event || msg.type === 'NEW_EVENT' || msg.type === 'EVENT_INGESTED' || msg.event_id) {
+            const raw = msg.type === 'EVENT_INGESTED' ? msg.data : (msg.event || msg)
+            if (!raw?.event_id) return
             const mapped = mapBackendEvent(raw)
             setEvents(prev => [mapped, ...prev.filter(e => e.id !== mapped.id)].slice(0, 40))
             setLastAddedEvent(mapped)

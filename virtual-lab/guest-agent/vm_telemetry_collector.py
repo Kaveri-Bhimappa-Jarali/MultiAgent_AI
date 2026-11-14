@@ -13,6 +13,7 @@ import time
 import json
 import re
 import socket
+import struct
 import subprocess
 import threading
 import urllib.request
@@ -181,7 +182,7 @@ class VMGuestCollector:
                 "api_key": self.api_key,
                 "ip_address": self.local_ip,
                 "system_metrics": metrics,
-                "active_collectors": ["auth_log", "sudo_tracker", "socket_monitor"]
+                "active_collectors": ["auth_log", "sudo_tracker", "socket_monitor"] + (["nginx_access"] if os.path.exists("/var/log/nginx/access.log") else []) + (["packet_monitor"] if os.environ.get("SOC_NETWORK_PEER_IP") else [])
             })
             sleep_seconds = self.heartbeat_interval
             if res.get("status") == "ACK" and res.get("vm_id") == self.vm_id:
@@ -447,6 +448,86 @@ class VMGuestCollector:
             "raw_payload": line
         }
 
+    def _parse_network_packet(self, frame: bytes):
+        """Parse inbound IPv4 TCP SYN / UDP metadata, never packet payloads."""
+        if len(frame) < 34 or frame[12:14] != b'\x08\x00':
+            return None
+        header = (frame[14] & 15) * 4
+        if header < 20 or len(frame) < 14 + header + 8:
+            return None
+        source = socket.inet_ntoa(frame[26:30])
+        destination = socket.inet_ntoa(frame[30:34])
+        if source != os.environ.get('SOC_NETWORK_PEER_IP') or destination != self.local_ip:
+            return None
+        # Ignore noninitial IPv4 fragments, which do not carry transport ports.
+        if struct.unpack('!H', frame[20:22])[0] & 0x1fff:
+            return None
+        protocol = frame[23]
+        offset = 14 + header
+        if protocol == 6:
+            if len(frame) < offset + 20 or frame[offset + 13] & 0x12 != 0x02:
+                return None
+            name = 'TCP'
+        elif protocol == 17:
+            name = 'UDP'
+        else:
+            return None
+        source_port, destination_port = struct.unpack('!HH', frame[offset:offset+4])
+        length = struct.unpack('!H', frame[16:18])[0]
+        return source, destination, source_port, destination_port, name, length
+
+    def monitor_network_packets(self):
+        """Observe brief lab connections that periodic ss snapshots cannot see."""
+        if not os.environ.get('SOC_NETWORK_PEER_IP'):
+            return
+        try:
+            capture = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(0x0800))
+            capture.bind((os.environ.get('SOC_NETWORK_INTERFACE', 'eth0'), 0))
+            capture.settimeout(0.2)
+        except (OSError, AttributeError) as exc:
+            print(f'[{self.vm_id}] Packet capture unavailable: {exc}', flush=True)
+            return
+        print(f'[{self.vm_id}] Lab packet capture enabled for {os.environ["SOC_NETWORK_PEER_IP"]}', flush=True)
+        flows = {}
+        flush_at = time.monotonic() + 1
+        with capture:
+            while self.is_running:
+                try:
+                    packet = self._parse_network_packet(capture.recv(65535))
+                    if packet:
+                        source, destination, source_port, port, protocol, length = packet
+                        key = (source, destination, port, protocol)
+                        flow = flows.setdefault(key, {'packets': 0, 'bytes': 0, 'source_port': source_port})
+                        flow['packets'] += 1
+                        flow['bytes'] += length
+                except socket.timeout:
+                    pass
+                except OSError as exc:
+                    print(f'[{self.vm_id}] Packet capture failed: {exc}', flush=True)
+                    return
+                if time.monotonic() < flush_at:
+                    continue
+                events = []
+                for (source, destination, port, protocol), flow in flows.items():
+                    events.append({
+                        'event_type': 'network_connection', 'severity': 'LOW',
+                        'source_ip': source, 'destination_ip': destination,
+                        'source_port': flow['source_port'], 'destination_port': port,
+                        'protocol': protocol, 'host': self.vm_id,
+                        'collector_source': 'packet_monitor',
+                        'timestamp': datetime.now(timezone.utc).isoformat(),
+                        'command_line': f'Observed {flow["packets"]} inbound {protocol} packets from {source} to {destination}:{port}',
+                        'raw_payload': json.dumps({'spkts': flow['packets'], 'sbytes': flow['bytes'], 'dur': 1.0, 'proto': protocol.lower(), 'dsport': port}),
+                    })
+                flows.clear()
+                flush_at = time.monotonic() + 1
+                if events:
+                    response = self._post('/api/vm/telemetry', {'vm_id': self.vm_id, 'events': events})
+                    if 'error' in response:
+                        self._buffer_events(events)
+                    else:
+                        self.events_sent += len(events)
+
     def monitor_network_connections(self):
         """Monitors inbound connections via ss/netstat to capture port sweeps and active connections"""
         seen_connections = set()
@@ -517,6 +598,7 @@ class VMGuestCollector:
         t_log.start()
         t_nginx.start()
         t_net.start()
+        threading.Thread(target=self.monitor_network_packets, daemon=True).start()
 
         try:
             while self.is_running:

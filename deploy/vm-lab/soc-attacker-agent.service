@@ -1,0 +1,18 @@
+[Unit]
+Description=SOC attacker node telemetry collector
+Wants=network-online.target
+After=network-online.target rsyslog.service
+
+[Service]
+Type=simple
+User=ubuntu
+SupplementaryGroups=adm
+EnvironmentFile=/etc/soc-agent.env
+WorkingDirectory=/opt/soc-agent
+ExecStart=/usr/bin/python3 -u /opt/soc-agent/vm_telemetry_collector.py http://127.0.0.1:18000 vm-attacker-01 ${SOC_VM_KEY} /var/log/auth.log
+Restart=always
+RestartSec=5
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

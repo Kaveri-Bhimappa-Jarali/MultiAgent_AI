@@ -50,3 +50,5 @@ plan.md
 prd.md
 PROJECT_OVERVIEW.md
 RUNNING.md
+# Local database reset backups (contain account and VM credentials)
+.backups/

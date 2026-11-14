@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import {
@@ -54,7 +54,8 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer
 } from 'recharts';
-import { useWebSocket } from '../context/WebSocketContext';
+import { useWebSocketSubscription } from '../context/WebSocketContext';
+import { LiveLabOverview } from '../components/dashboard/LiveLabOverview';
 import { formatSocTimestamp } from '../utils/timestamps.js';
 
 // ── Agent Metadata Map ────────────────────────────────────────────────────────
@@ -190,56 +191,125 @@ export const Dashboard: React.FC = () => {
   const [lastUpdated, setLastUpdated] = useState<string>(new Date().toISOString());
 
   const navigate = useNavigate();
-  const { subscribe } = useWebSocket();
+  const subscribe = useWebSocketSubscription();
 
   const showToast = (text: string, type: 'success' | 'info' | 'error' = 'success') => {
     setToastMessage({ text, type });
     setTimeout(() => setToastMessage(null), 4500);
   };
 
+  const fetchBusyRef = useRef(false);
+  const lastFetchRef = useRef(0);
+  const fetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const disposedRef = useRef(false);
+  const forceFeedRef = useRef(false);
+  const [feedUpdatesAvailable, setFeedUpdatesAvailable] = useState(false);
+  const pendingFeedRef = useRef<{
+    findings: AgentFinding[]; incidents: Incident[]; responses: ResponseAction[];
+    events: SecurityEvent[]; verifications: VerificationResult[];
+  } | null>(null);
+  const feedVersionRef = useRef('');
+
+  const feedVersion = (feed: NonNullable<typeof pendingFeedRef.current>) => JSON.stringify([
+    feed.findings.map(item => item.finding_id),
+    feed.incidents.map(item => [item.incident_id, item.updated_at, item.status, item.investigation_status]),
+    feed.responses.map(item => [item.action_id, item.status]),
+    feed.events.map(item => [item.event_id, item.processed_at, item.detection_status]),
+    feed.verifications,
+  ]);
+
+  const applyFeed = (feed: NonNullable<typeof pendingFeedRef.current>) => {
+    setFindings(feed.findings);
+    setIncidents(feed.incidents);
+    setResponses(feed.responses);
+    setAllEvents(feed.events);
+    setVerifications(feed.verifications);
+    feedVersionRef.current = feedVersion(feed);
+    setLastUpdated(new Date().toISOString());
+    pendingFeedRef.current = null;
+    setFeedUpdatesAvailable(false);
+  };
+
   const fetchAllData = async () => {
+    if (disposedRef.current) return;
+    if (fetchBusyRef.current || Date.now() - lastFetchRef.current < 2000) {
+      if (!fetchTimerRef.current) fetchTimerRef.current = setTimeout(() => {
+        fetchTimerRef.current = null;
+        fetchAllData();
+      }, 2000);
+      return;
+    }
+    fetchBusyRef.current = true;
+    lastFetchRef.current = Date.now();
     try {
       setRefreshing(true);
       const [dashSummary, findingsRes, incidentsRes, responsesRes, eventsRes, verifRes] = await Promise.all([
         api.getDashboardSummary().catch(() => null),
-        api.getAgentFindings(100).catch(() => []),
-        api.getIncidents().catch(() => []),
-        api.getResponses().catch(() => []),
-        api.getEvents({ limit: 150 }).catch(() => ({ events: [] })),
-        api.getVerifications().catch(() => [])
+        api.getAgentFindings(100).catch(() => null),
+        api.getIncidents().catch(() => null),
+        api.getResponses().catch(() => null),
+        api.getEvents({ limit: 150 }).catch(() => null),
+        api.getVerifications().catch(() => null)
       ]);
 
       if (dashSummary) setData(dashSummary);
-      setFindings(findingsRes);
-      setIncidents(incidentsRes);
-      setResponses(responsesRes);
-      setAllEvents((eventsRes as any).events || []);
-      setVerifications(verifRes);
-      setLastUpdated(new Date().toISOString());
+      // A partial refresh must not empty the page or move the content being read.
+      if (findingsRes && incidentsRes && responsesRes && eventsRes && verifRes) {
+        const feed = { findings: findingsRes, incidents: incidentsRes, responses: responsesRes,
+          events: eventsRes.events || [], verifications: verifRes };
+        if (forceFeedRef.current || !feedVersionRef.current || window.scrollY < 180) {
+          applyFeed(feed);
+          forceFeedRef.current = false;
+        } else if (feedVersion(feed) !== feedVersionRef.current) {
+          pendingFeedRef.current = feed;
+          setFeedUpdatesAvailable(true);
+        }
+      }
     } catch (err) {
       console.error('Failed to load dashboard data', err);
     } finally {
+      fetchBusyRef.current = false;
       setLoading(false);
       setRefreshing(false);
     }
   };
 
   useEffect(() => {
+    disposedRef.current = false;
     fetchAllData();
     const interval = setInterval(fetchAllData, 20000);
-    return () => clearInterval(interval);
+    return () => {
+      disposedRef.current = true;
+      clearInterval(interval);
+      if (fetchTimerRef.current) clearTimeout(fetchTimerRef.current);
+      fetchTimerRef.current = null;
+    };
   }, []);
 
   // WebSocket Live Subscriptions
   useEffect(() => {
-    const unsubEvent = subscribe('EVENT_INGESTED', (newEvent: any) => {
-      setAllEvents(prev => [newEvent, ...prev.slice(0, 149)]);
-      setLastUpdated(new Date().toISOString());
+    // Batch incoming events so a burst produces one view update instead of one per log.
+    const incoming = new Map<string, SecurityEvent>();
+    const unsubEvent = subscribe('EVENT_INGESTED', (newEvent: SecurityEvent) => {
+      incoming.set(newEvent.event_id, newEvent);
+      if (incoming.size > 150) incoming.delete(incoming.keys().next().value);
     });
+    const eventInterval = setInterval(() => {
+      if (!incoming.size || document.hidden) return;
+      if (window.scrollY >= 180) {
+        incoming.clear();
+        fetchAllData();
+        return;
+      }
+      const batch = Array.from(incoming.values()).reverse();
+      incoming.clear();
+      setAllEvents(prev => [...batch, ...prev.filter(event => !batch.some(item => item.event_id === event.event_id))].slice(0, 150));
+      setLastUpdated(new Date().toISOString());
+    }, 1000);
 
     const unsubIncident = subscribe('INCIDENT_CREATED', () => {
       fetchAllData();
-      showToast('New correlated incident created by Correlation Agent', 'info');
+
     });
 
     const unsubIncidentUpd = subscribe('INCIDENT_UPDATED', () => {
@@ -248,7 +318,7 @@ export const Dashboard: React.FC = () => {
 
     const unsubLLM = subscribe('LLM_ANALYSIS_COMPLETED', (payload: any) => {
       fetchAllData();
-      showToast(`LLM analysis completed: ${payload?.analysis?.attack_type || 'Threat verified'}`, 'success');
+
     });
 
     const unsubResponse = subscribe('RESPONSE_ACTION_UPDATED', () => {
@@ -256,6 +326,7 @@ export const Dashboard: React.FC = () => {
     });
 
     return () => {
+      clearInterval(eventInterval);
       unsubEvent();
       unsubIncident();
       unsubIncidentUpd();
@@ -404,17 +475,6 @@ export const Dashboard: React.FC = () => {
         else buckets[bucket].System++;
       }
     }
-    const values = Object.values(buckets);
-    const totalReal = values.reduce((s, b) => s + b.Authentication + b.Network + b.Malware + b.System, 0);
-    if (totalReal === 0) {
-      const seed = [3, 5, 2, 8, 4, 12, 7, 15, 6, 9, 11, 4];
-      Object.keys(buckets).forEach((k, i) => {
-        buckets[k].Authentication = Math.round(seed[i] * 0.5);
-        buckets[k].Network = Math.round(seed[i] * 0.3);
-        buckets[k].Malware = Math.round(seed[i] * 0.15);
-        buckets[k].System = Math.round(seed[i] * 0.05);
-      });
-    }
     return Object.values(buckets);
   }, [allEvents]);
 
@@ -433,18 +493,24 @@ export const Dashboard: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="grid grid-cols-1 gap-6 pb-12">
+      {feedUpdatesAvailable && <button
+        onClick={() => {
+          if (pendingFeedRef.current) applyFeed(pendingFeedRef.current);
+          else { forceFeedRef.current = true; fetchAllData(); }
+        }}
+        className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 rounded-full border border-sky-400/40 bg-slate-950 px-5 py-3 text-xs text-sky-200 shadow-xl"
+      >New updates available · Update feed</button>}
 
       {/* ── TOAST NOTIFICATION ──────────────────────────────────────────────── */}
       {toastMessage && (
         <div
-          className={`fixed top-5 right-5 z-50 flex items-center space-x-3 px-4 py-3 rounded-xl border text-xs font-mono shadow-2xl backdrop-blur-md animate-slide-in-up ${
-            toastMessage.type === 'success'
-              ? 'bg-emerald-950/90 border-emerald-500/40 text-emerald-200'
-              : toastMessage.type === 'error'
+          className={`fixed top-5 right-5 z-50 flex items-center space-x-3 px-4 py-3 rounded-xl border text-xs font-mono shadow-2xl backdrop-blur-md animate-slide-in-up ${toastMessage.type === 'success'
+            ? 'bg-emerald-950/90 border-emerald-500/40 text-emerald-200'
+            : toastMessage.type === 'error'
               ? 'bg-rose-950/90 border-rose-500/40 text-rose-200'
               : 'bg-indigo-950/90 border-indigo-500/40 text-indigo-200'
-          }`}
+            }`}
         >
           {toastMessage.type === 'success' ? (
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
@@ -533,7 +599,7 @@ export const Dashboard: React.FC = () => {
             </div>
 
             <button
-              onClick={fetchAllData}
+              onClick={() => { forceFeedRef.current = true; fetchAllData(); }}
               disabled={refreshing}
               className="p-2.5 rounded-xl text-xs bg-midnight/80 text-softwhite/80 border border-white/10 hover:border-royal/40 transition"
               title="Refresh all data"
@@ -550,6 +616,8 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
       </div>
+
+      <LiveLabOverview />
 
       {/* ── TOP KPI METRIC CARDS ────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -648,11 +716,10 @@ export const Dashboard: React.FC = () => {
         <div className="flex flex-wrap items-center gap-1.5">
           <button
             onClick={() => setActiveStageTab('all')}
-            className={`px-4 py-2 rounded-xl text-xs font-mono font-semibold transition-all duration-200 flex items-center space-x-2 ${
-              activeStageTab === 'all'
-                ? 'bg-royal text-white shadow-lg shadow-royal/30'
-                : 'bg-white/5 text-softwhite/70 hover:bg-white/10'
-            }`}
+            className={`px-4 py-2 rounded-xl text-xs font-mono font-semibold transition-all duration-200 flex items-center space-x-2 ${activeStageTab === 'all'
+              ? 'bg-royal text-white shadow-lg shadow-royal/30'
+              : 'bg-white/5 text-softwhite/70 hover:bg-white/10'
+              }`}
           >
             <Sliders className="w-3.5 h-3.5" />
             <span>All Stages (Integrated Pipeline)</span>
@@ -660,11 +727,10 @@ export const Dashboard: React.FC = () => {
 
           <button
             onClick={() => setActiveStageTab('stage1')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-mono font-semibold transition-all duration-200 flex items-center space-x-2 ${
-              activeStageTab === 'stage1'
-                ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30'
-                : 'bg-white/5 text-softwhite/70 hover:bg-white/10'
-            }`}
+            className={`px-3.5 py-2 rounded-xl text-xs font-mono font-semibold transition-all duration-200 flex items-center space-x-2 ${activeStageTab === 'stage1'
+              ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30'
+              : 'bg-white/5 text-softwhite/70 hover:bg-white/10'
+              }`}
           >
             <span className="w-4 h-4 rounded-full bg-purple-500/30 text-purple-200 flex items-center justify-center text-[10px]">1</span>
             <span>Agent Findings</span>
@@ -673,11 +739,10 @@ export const Dashboard: React.FC = () => {
 
           <button
             onClick={() => setActiveStageTab('stage2')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-mono font-semibold transition-all duration-200 flex items-center space-x-2 ${
-              activeStageTab === 'stage2'
-                ? 'bg-fuchsia-600 text-white shadow-lg shadow-fuchsia-600/30'
-                : 'bg-white/5 text-softwhite/70 hover:bg-white/10'
-            }`}
+            className={`px-3.5 py-2 rounded-xl text-xs font-mono font-semibold transition-all duration-200 flex items-center space-x-2 ${activeStageTab === 'stage2'
+              ? 'bg-fuchsia-600 text-white shadow-lg shadow-fuchsia-600/30'
+              : 'bg-white/5 text-softwhite/70 hover:bg-white/10'
+              }`}
           >
             <span className="w-4 h-4 rounded-full bg-fuchsia-500/30 text-fuchsia-200 flex items-center justify-center text-[10px]">2</span>
             <span>Correlation Agent</span>
@@ -686,11 +751,10 @@ export const Dashboard: React.FC = () => {
 
           <button
             onClick={() => setActiveStageTab('stage3')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-mono font-semibold transition-all duration-200 flex items-center space-x-2 ${
-              activeStageTab === 'stage3'
-                ? 'bg-teal-600 text-white shadow-lg shadow-teal-600/30'
-                : 'bg-white/5 text-softwhite/70 hover:bg-white/10'
-            }`}
+            className={`px-3.5 py-2 rounded-xl text-xs font-mono font-semibold transition-all duration-200 flex items-center space-x-2 ${activeStageTab === 'stage3'
+              ? 'bg-teal-600 text-white shadow-lg shadow-teal-600/30'
+              : 'bg-white/5 text-softwhite/70 hover:bg-white/10'
+              }`}
           >
             <span className="w-4 h-4 rounded-full bg-teal-500/30 text-teal-200 flex items-center justify-center text-[10px]">3</span>
             <span>LLM Threat Findings</span>
@@ -699,11 +763,10 @@ export const Dashboard: React.FC = () => {
 
           <button
             onClick={() => setActiveStageTab('stage4')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-mono font-semibold transition-all duration-200 flex items-center space-x-2 ${
-              activeStageTab === 'stage4'
-                ? 'bg-amber-600 text-white shadow-lg shadow-amber-600/30'
-                : 'bg-white/5 text-softwhite/70 hover:bg-white/10'
-            }`}
+            className={`px-3.5 py-2 rounded-xl text-xs font-mono font-semibold transition-all duration-200 flex items-center space-x-2 ${activeStageTab === 'stage4'
+              ? 'bg-amber-600 text-white shadow-lg shadow-amber-600/30'
+              : 'bg-white/5 text-softwhite/70 hover:bg-white/10'
+              }`}
           >
             <span className="w-4 h-4 rounded-full bg-amber-500/30 text-amber-200 flex items-center justify-center text-[10px]">4</span>
             <span>Containment: Auto vs Manual</span>
@@ -786,11 +849,10 @@ export const Dashboard: React.FC = () => {
                 <button
                   key={agentName}
                   onClick={() => setSelectedAgentFilter(agentName)}
-                  className={`px-3 py-1.5 rounded-xl text-[11px] font-mono font-medium transition-all duration-200 flex items-center space-x-1.5 border ${
-                    isSelected
-                      ? 'bg-purple-600 text-white border-purple-400 shadow-md shadow-purple-600/30'
-                      : 'bg-midnight/70 text-softwhite/70 border-white/5 hover:border-white/20'
-                  }`}
+                  className={`px-3 py-1.5 rounded-xl text-[11px] font-mono font-medium transition-all duration-200 flex items-center space-x-1.5 border ${isSelected
+                    ? 'bg-purple-600 text-white border-purple-400 shadow-md shadow-purple-600/30'
+                    : 'bg-midnight/70 text-softwhite/70 border-white/5 hover:border-white/20'
+                    }`}
                 >
                   {agentName !== 'ALL' && React.createElement(meta.icon, { className: 'w-3 h-3' })}
                   <span>{agentName === 'ALL' ? 'All Agents' : agentName.replace(' Agent', '')}</span>
@@ -827,7 +889,8 @@ export const Dashboard: React.FC = () => {
                 return (
                   <div
                     key={finding.finding_id}
-                    className="p-4 rounded-xl bg-midnight/80 border transition-all duration-200 hover:-translate-y-0.5 space-y-3"
+                    data-finding-id={finding.finding_id}
+                    className="p-4 rounded-xl bg-midnight/80 border transition-colors duration-200 space-y-3"
                     style={{
                       borderColor: meta.borderColor,
                       boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
@@ -1613,9 +1676,9 @@ export const Dashboard: React.FC = () => {
             <div>
               <h3 className="text-base font-bold text-white flex items-center space-x-2">
                 <TrendingUp className="w-5 h-5 text-royal-200" />
-                <span>Attack Volume Telemetry — 24 Hours</span>
+                <span>Recent telemetry by category</span>
               </h3>
-              <p className="text-xs text-softwhite/60">Categorized signals plotted over 2-hour intervals</p>
+              <p className="text-xs text-softwhite/60">Latest 150 events within 24 hours · 2-hour intervals · includes simulated events</p>
             </div>
             <div className="flex items-center gap-3 text-[11px] font-mono">
               <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-amber-400" />Auth</span>
@@ -1633,9 +1696,10 @@ export const Dashboard: React.FC = () => {
               <Tooltip
                 contentStyle={{ background: '#0B1020', border: '1px solid rgba(109,90,230,0.4)', borderRadius: 10 }}
               />
-              <Area type="monotone" dataKey="Authentication" stroke="#FCD34D" fill="#FCD34D" fillOpacity={0.15} strokeWidth={1.5} />
-              <Area type="monotone" dataKey="Network" stroke="#60A5FA" fill="#60A5FA" fillOpacity={0.15} strokeWidth={1.5} />
-              <Area type="monotone" dataKey="Malware" stroke="#F87171" fill="#F87171" fillOpacity={0.15} strokeWidth={1.5} />
+              <Area isAnimationActive={false} type="monotone" dataKey="Authentication" stroke="#FCD34D" fill="#FCD34D" fillOpacity={0.15} strokeWidth={1.5} />
+              <Area isAnimationActive={false} type="monotone" dataKey="Network" stroke="#60A5FA" fill="#60A5FA" fillOpacity={0.15} strokeWidth={1.5} />
+              <Area isAnimationActive={false} type="monotone" dataKey="Malware" stroke="#F87171" fill="#F87171" fillOpacity={0.15} strokeWidth={1.5} />
+              <Area isAnimationActive={false} type="monotone" dataKey="System" stroke="#C084FC" fill="#C084FC" fillOpacity={0.15} strokeWidth={1.5} />
             </AreaChart>
           </ResponsiveContainer>
         </div>

@@ -13,7 +13,8 @@ import {
   ThreatIndicator,
   ThreatLookupResult,
   EvaluationRun,
-  DashboardData
+  DashboardData,
+  LabActivity
 } from '../types';
 
 const API_BASE = '/api';
@@ -61,6 +62,7 @@ export const api = {
   logout: () => request<{ message: string }>('/auth/logout', { method: 'POST' }),
 
   // Dashboard
+  getLabActivity: (minutes = 60) => request<LabActivity>(`/dashboard/lab-activity?minutes=${minutes}`),
   getDashboardSummary: () => request<DashboardData>('/dashboard/summary'),
 
   // Events

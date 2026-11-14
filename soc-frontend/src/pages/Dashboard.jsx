@@ -9,6 +9,7 @@ import { RiskGauge } from '../components/dashboard/RiskGauge'
 import { ActivityChart } from '../components/dashboard/ActivityChart'
 import { RecentEvents } from '../components/dashboard/RecentEvents'
 import { api } from '../api/client'
+import { VMReporting } from '../components/dashboard/VMReporting'
 import { Shield, Radio, Server, CheckCircle2, Bot, Zap, Crosshair, Globe, ArrowRight, Sliders, Layers } from 'lucide-react'
 import { MultiAgentPipeline } from '../components/pipeline/MultiAgentPipeline'
 
@@ -110,6 +111,7 @@ export function Dashboard() {
 
   return (
     <div className="p-4 lg:p-8 space-y-7">
+      <VMReporting />
       {/* Top Banner Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2">
         <div>

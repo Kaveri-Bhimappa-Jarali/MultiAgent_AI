@@ -1,0 +1,18 @@
+[Unit]
+Description=SOC victim telemetry collector
+Wants=network-online.target
+After=network-online.target nginx.service rsyslog.service
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/soc-agent.env
+Environment=SOC_NETWORK_PEER_IP=10.0.0.12
+Environment=SOC_NETWORK_INTERFACE=eth0
+WorkingDirectory=/opt/soc-agent
+ExecStart=/usr/bin/python3 -u /opt/soc-agent/vm_telemetry_collector.py http://127.0.0.1:8000 vm-endpoint-01 ${SOC_VM_KEY} /var/log/auth.log
+Restart=always
+RestartSec=5
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

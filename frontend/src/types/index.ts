@@ -395,3 +395,29 @@ export interface SimulationConnectivityStatus {
   allowed_targets: string[];
   active_execution?: any;
 }
+
+
+export interface LabActivityNode {
+  vm_id: string;
+  label: string;
+  public_ip: string;
+  private_ip: string;
+  status: string;
+  last_heartbeat_at: string | null;
+  last_telemetry_at: string | null;
+  total_events: number;
+  window_events: number;
+}
+
+export interface LabActivity {
+  updated_at: string;
+  window_start: string;
+  window_minutes: number;
+  bucket_minutes: number;
+  nodes: LabActivityNode[];
+  buckets: { timestamp: string; attacker: number; victim: number }[];
+  categories: { name: string; count: number }[];
+  total_events: number;
+  high_severity_events: number;
+  http_events: number;
+}

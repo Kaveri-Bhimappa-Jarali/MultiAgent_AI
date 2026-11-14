@@ -5,7 +5,7 @@ from app.schemas.base import UTCBaseModel
 
 class SimulationLaunchRequest(BaseModel):
     scenario_id: str = Field(..., description="Unique scenario identifier")
-    target_ip: Optional[str] = Field("10.0.0.14", description="Allowed private target IP")
+    target_ip: Optional[str] = Field(None, description="Allowed private target IP; defaults to the configured victim")
     parameters: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Custom parameters strictly bounded by safety limits")
 
 class SimulationStopRequest(BaseModel):

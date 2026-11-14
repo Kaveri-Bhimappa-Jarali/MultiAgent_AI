@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, List
@@ -313,3 +313,10 @@ def get_dashboard_summary(db: Session = Depends(get_db)):
         system_health_components=system_health_components,
         agent_summary=agent_summary
     )
+
+
+@router.get("/lab-activity")
+def lab_activity(minutes: int = Query(60, ge=15, le=1440), db: Session = Depends(get_db)):
+    """Complete received-event counts for authentic telemetry from the connected VM pair."""
+    from app.services.lab_activity_service import get_lab_activity
+    return get_lab_activity(db, minutes)
