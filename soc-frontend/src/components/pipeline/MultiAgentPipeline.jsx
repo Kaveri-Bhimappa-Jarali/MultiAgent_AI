@@ -359,7 +359,7 @@ export function MultiAgentPipeline() {
   const pendingApprovalActions = useMemo(() => {
     return responses.filter((r) => {
       return (
-        (r.status === 'PENDING_APPROVAL' || r.status === 'RECOMMENDED' || !r.executed_at) &&
+        (r.status === 'PENDING_APPROVAL' || r.status === 'RECOMMENDED') &&
         r.requires_approval !== false
       )
     })

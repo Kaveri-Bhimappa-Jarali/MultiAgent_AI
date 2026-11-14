@@ -29,6 +29,7 @@ from app.services.audit_service import log_audit_entry
 SIMULATABLE_ACTIONS = {
     "BLOCK_IP": "Would add a firewall deny rule for the specified IP address.",
     "ISOLATE_ENDPOINT": "Would restrict the specified endpoint to its SOC management channel.",
+    "ISOLATE_HOST": "Would restrict the specified host to its SOC management channel.",
     "DISABLE_USER": "Would disable sign-in for the specified identity.",
 }
 

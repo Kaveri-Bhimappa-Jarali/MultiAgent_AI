@@ -62,14 +62,6 @@ export const Incidents: React.FC = () => {
         badge="SIEM & SOAR"
         badgeVariant="rose"
         description="Investigate confirmed security incidents correlated from multiple detections. Click any incident to inspect multi-agent findings, 8-question RCA, and recommended responses."
-        workflowStep={{
-          stepNumber: 4,
-          totalSteps: 6,
-          stepName: 'Investigate Incidents',
-          nextRoute: '/responses',
-          nextLabel: 'Review Responses (Step 5)'
-        }}
-        terms={['Incident', 'Risk Score', 'Severity']}
         actions={
           <div className="flex items-center space-x-3">
             <div className="flex items-center space-x-1.5 text-[10px] font-mono text-emerald-400 px-2.5 py-1.5 rounded-lg bg-emerald-400/10 border border-emerald-400/20">
@@ -167,6 +159,12 @@ export const Incidents: React.FC = () => {
                     <span>Hosts: {inc.affected_hosts.length > 0 ? inc.affected_hosts.join(', ') : 'None'}</span>
                   </span>
                   <span>Events: <span className="text-softwhite font-bold">{inc.event_count}</span></span>
+                  <span>Findings: <span className="text-softwhite font-bold">{inc.finding_count || 1}</span></span>
+                  {inc.participating_agents && inc.participating_agents.length > 0 && (
+                    <span className="text-royal-300">
+                      Agents: <span className="font-semibold">{inc.participating_agents.map(a => a.replace(' Agent', '')).join(', ')}</span>
+                    </span>
+                  )}
                   <span>Assigned: <span className="text-softwhite">{inc.assigned_analyst}</span></span>
                 </div>
               </div>

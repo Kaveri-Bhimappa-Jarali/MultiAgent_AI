@@ -693,7 +693,7 @@ def evaluate_event_with_rolling_window(db: Session, evt: SecurityEvent) -> List[
     # 8. Unsupervised Isolation Forest ML Anomaly Detection on incoming event
     try:
         is_anom, anom_score, anom_indicators = anomaly_engine.score_event(evt)
-        if (is_anom or anom_score > 68.0) and not is_finding_duplicated("RULE-ANOM-001", evt.event_id, window_seconds=30):
+        if (anom_score >= 68.0 or (is_anom and anom_score >= 60.0)) and not is_finding_duplicated("RULE-ANOM-001", evt.event_id, window_seconds=30):
             finding = DetectionFinding(
                 finding_id=f"FIND-{uuid.uuid4().hex[:8].upper()}",
                 rule_id="RULE-ANOM-001",

@@ -131,9 +131,9 @@ class AnomalyDetectionEngine:
         decision_val = self.model.decision_function(scaled)[0]  # lower = more anomalous
         
         # Normalize decision function to 0-100 anomaly scale
-        # decision_function is roughly between -0.5 and 0.5
-        norm_score = float(np.clip((0.2 - decision_val) * 100, 0, 100))
-        is_anomaly = bool(raw_pred == -1 or norm_score > 60)
+        # decision_function typically spans between +0.25 (highly normal) and -0.25 (highly anomalous)
+        norm_score = float(np.clip((0.25 - decision_val) / 0.50 * 100.0, 0.0, 100.0))
+        is_anomaly = bool(raw_pred == -1 or norm_score >= 65.0)
         
         indicators = []
         if features[0][3] == 1.0:

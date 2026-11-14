@@ -69,7 +69,6 @@ export const EvaluationLab: React.FC = () => {
         badge="Empirical Validation"
         badgeVariant="royal"
         description="Train and evaluate supervised detection models on standard cybersecurity datasets (UNSW-NB15, CICIDS2017) with strict train/test isolation."
-        terms={['Detection', 'Risk Score']}
       />
 
       {/* Control Benchmarking Panel */}

@@ -1,0 +1,303 @@
+<USER_REQUEST>
+# End-to-End Functional Testing of My Multi-Agent AI SOC Without VM Integration
+
+Act as a Senior QA Engineer, Cybersecurity Testing Engineer and SOC Architect.
+
+## Project
+**Multi-Agent AI Security Operations Center (SOC) for Real-Time Threat Detection**
+
+GitHub Repository:
+https://github.com/Kaveri-Bhimappa-Jarali/MultiAgent_AI.git
+
+## 1. My Current Problem
+
+My SOC application is implemented with 10 specialized agents, a FastAPI backend, React dashboard, ML detection models, event correlation, investigation, risk assessment and SOAR response.
+
+However, my system is currently NOT connected to separate Attacker and Victim Virtual Machines.
+
+Other teams have VM integration, but I currently want to verify whether my existing application is actually working correctly without depending on external VMs.
+
+I do NOT want you to build VM integration right now.
+
+I do NOT want you to rewrite my project.
+
+I want you to test my EXISTING application locally and identify which functionalities are working, which are failing and which are incomplete.
+
+## 2. First Inspect My Existing Application
+
+Before testing, inspect:
+
+- Backend startup and configuration.
+- FastAPI APIs and request schemas.
+- Event ingestion endpoint.
+- RealtimeEventQueue and background workers.
+- All 10 specialized agents.
+- Detection rules and ML inference.
+- AgentFinding and SecurityEvent database models.
+- Correlation Agent and 900-second window.
+- Incident creation and update logic.
+- Attack-Path Analysis Agent.
+- Investigation Agent.
+- Risk Assessment.
+- Defensive Response Agent.
+- SOAR execution and approval.
+- Response verification.
+- WebSocket communication.
+- React dashboard.
+
+Identify how to generate events through the actual application.
+
+Do not guess API endpoints, payload fields or event types. Inspect the real implementation first.
+
+## 3. Execute Real Local Functional Tests
+
+Use safe synthetic security telemetry through the existing FastAPI event ingestion API.
+
+IMPORTANT:
+- Use the actual event ingestion API.
+- Do not directly insert findings or incidents into the database.
+- Do not bypass the event queue.
+- Do not call agent functions directly as a substitute for the real pipeline.
+- Do not use mocked agent responses to claim successful integration.
+- Do not require external VMs.
+- Do not execute destructive commands.
+- Use synthetic IP addresses and test hostnames.
+- Keep SOAR dry-run mode enabled.
+
+### Test 1: Single Authentication Failure
+
+Generate one failed login event.
+
+Verify:
+- Event is successfully ingested.
+- Authentication Agent processes it.
+- Expected finding behaviour occurs according to existing rules.
+- Finding is stored in the database if generated.
+- No multi-finding correlated incident is created.
+
+### Test 2: Brute-Force Detection
+
+Generate three failed login events from the same source IP and username within the existing 300-second detection window.
+
+Verify:
+- Authentication Agent identifies the brute-force pattern.
+- One aggregated brute-force finding is created.
+- The finding references the contributing event IDs.
+- The Correlation Agent does not treat the three raw events as three independent findings.
+- No multi-agent incident is created from this single aggregated finding.
+
+### Test 3: Multi-Agent Correlation
+
+Generate a brute-force finding followed by a suspicious endpoint process execution event on the same victim host.
+
+Verify:
+- Authentication Agent generates its finding.
+- Endpoint EDR Agent generates its finding.
+- Both findings are independently persisted.
+- Both findings have distinct source event IDs.
+- Correlation Agent identifies the shared host and time relationship.
+- One correlated incident is created.
+- Both findings are linked to the same incident.
+- Correlation reasons are stored.
+- Existing incident IDs are preserved on subsequent updates.
+
+### Test 4: Network Monitoring
+
+Generate synthetic network connection events with multiple destination ports.
+
+Verify:
+- Network Monitoring Agent processes the events.
+- Existing port scanning detection rules execute.
+- Random Forest inference is attempted when sufficient valid features are available.
+- Network findings are stored correctly.
+- Model failures or missing features are reported honestly.
+
+### Test 5: Endpoint Detection
+
+Generate safe synthetic endpoint telemetry representing suspicious process execution and file access.
+
+Verify:
+- Endpoint EDR Agent processes the events.
+- Relevant detection rules execute.
+- MITRE ATT&CK mapping is attached where supported.
+- Endpoint findings contain correct host, process, user and source event references.
+
+Do not execute malicious commands on the actual computer.
+
+### Test 6: Anomaly Detection
+
+Generate telemetry containing valid numerical features for the existing Isolation Forest model.
+
+Verify:
+- Model inference executes.
+- Anomaly score is generated.
+- Relevant feature information is recorded.
+- Anomaly finding is stored correctly.
+
+### Test 7: Threat Intelligence
+
+Inspect the existing threat intelligence database and use a controlled test indicator that is already supported by the implementation.
+
+Verify:
+- Indicator lookup works.
+- Threat Intelligence Agent enriches the relevant evidence.
+- An enrichment finding from the same source event does not independently create a correlated incident.
+
+### Test 8: Unrelated Findings
+
+Generate findings for two unrelated hosts, IP addresses and accounts within the 900-second correlation window.
+
+Verify:
+- Both findings are stored.
+- Correlation Agent does not combine unrelated findings.
+- No false incident is created.
+
+### Test 9: Attack Path and Investigation
+
+Use a valid correlated incident from Test 3.
+
+Verify:
+- Attack-Path Agent processes the established incident.
+- Graph nodes and edges use observed evidence.
+- No invented intermediate nodes are generated.
+- Investigation Agent generates the existing eight-question investigation output.
+- Incident summary is saved correctly.
+
+### Test 10: Risk Assessment and SOAR
+
+Use the same correlated incident.
+
+Verify:
+- Risk assessment calculates the actual risk score.
+- Defensive Response Agent generates appropriate recommendations.
+- Approval requirements are enforced.
+- Unapproved actions cannot execute.
+- Supported dry-run actions generate execution records.
+- Unsupported actions are clearly reported as unsupported.
+- Verification results are stored accurately.
+
+### Test 11: Duplicate Event Processing
+
+Replay an already processed event using the existing supported ingestion mechanism.
+
+Verify:
+- Duplicate event handling works.
+- Duplicate findings are not created unnecessarily.
+- Duplicate incidents and relationships are prevented.
+
+### Test 12: Real-Time Dashboard
+
+Verify that the dashboard receives actual backend updates.
+
+Check:
+- Events.
+- Individual agent findings.
+- Correlated incidents.
+- Participating agents.
+- Attack paths.
+- Investigation summaries.
+- Risk scores.
+- Response actions.
+- Verification results.
+
+Confirm that an individual finding does not appear as a multi-agent correlated incident.
+
+## 4. Verify All 10 Agents
+
+Prepare a report showing:
+
+| Agent | Test input | Actual execution | Finding/output | Database persistence | Result |
+|---|---|---|---|---|---|
+| Network Monitoring | | | | | |
+| Authentication | | | | | |
+| Endpoint EDR | | | | | |
+| Malicious Behaviour | | | | | |
+| Anomaly Detection | | | | | |
+| Threat Intelligence | | | | | |
+| Correlation | | | | | |
+| Attack-Path Analysis | | | | | |
+| Investigation | | | | | |
+| Defensive Response | | | | | |
+
+Do not mark an agent as working just because its Python class exists.
+
+It must be demonstrated through the actual execution path.
+
+## 5. Verify the Correct Architecture
+
+Confirm that the actual lifecycle is:
+
+Security Event
+→ Ingestion
+→ Validation and Persistence
+→ Event Queue
+→ Relevant Specialized Agent
+→ Agent Finding
+→ Correlation Evaluation
+→ Valid Security Incident
+→ Attack-Path Analysis
+→ Investigation
+→ Risk Assessment
+→ Defensive Response
+→ Approval
+→ Execution
+→ Response Verification
+→ Dashboard Update.
+
+A single event or finding must not automatically trigger the complete incident workflow.
+
+## 6. Test Execution Rules
+
+Before executing tests:
+
+1. Inspect existing configuration.
+2. Confirm backend and database paths.
+3. Identify safe test-data handling.
+4. Preserve existing user data.
+5. Use an isolated test database if possible.
+6. Do not overwrite production or development data.
+7. Do not change existing detection thresholds.
+8. Do not change the 300-second authentication window or 900-second correlation window.
+9. Keep response actions in dry-run mode.
+
+Run the existing backend and frontend regression suites after functional testing.
+
+## 7. Final Testing Report
+
+At the end, provide:
+
+1. Backend startup status.
+2. Frontend startup status.
+3. API ingestion status.
+4. Results of all 12 scenarios.
+5. Actual execution logs.
+6. Actual event IDs and finding IDs.
+7. Database records and relationships.
+8. Incident creation/update results.
+9. WebSocket and dashboard verification.
+10. All 10 agent execution results.
+11. Backend and frontend regression test results.
+12. List of bugs discovered.
+13. List of files modified, if any.
+14. Remaining features that require actual VM integration.
+
+Use these statuses:
+
+- PASS: Successfully verified through the actual application.
+- FAIL: Executed but produced an incorrect result.
+- NOT VERIFIED: Could not test with available local resources.
+- PARTIALLY WORKING: Some functionality works but has limitations.
+
+## Final Requirement
+
+My immediate objective is to determine whether my existing SOC application works correctly without Attacker and Victim VMs.
+
+Do not build another project or unnecessary simulation framework.
+
+Use the existing application, perform actual local end-to-end testing, fix only confirmed defects and give me honest evidence of what works.
+
+Do not report 100% completion simply because automated tests pass. Real API ingestion, agent execution, database persistence, correlation and dashboard behaviour must be verified.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-11-14T15:17:58+05:30.
+</ADDITIONAL_METADATA>

@@ -98,6 +98,8 @@ export interface AgentFinding {
   description: string;
   evidence: Record<string, any>;
   recommendations: string[];
+  incident_id?: string | null;
+  source_event_ids?: string[];
   created_at: string;
 }
 
@@ -149,6 +151,10 @@ export interface Incident {
   affected_hosts: string[];
   affected_ips: string[];
   event_count: number;
+  finding_count?: number;
+  participating_agents?: string[];
+  correlation_reasons?: string[];
+  correlation_window_seconds?: number;
   assigned_analyst: string;
   investigation_status: string;
   response_status: string;

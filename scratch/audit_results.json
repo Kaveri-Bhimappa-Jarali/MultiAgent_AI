@@ -1,0 +1,251 @@
+{
+  "test_results": {
+    "Test 1: Normal Event": {
+      "status": "PASS",
+      "event_id": "EVT-TEST1-NORMAL",
+      "detail": "Normal auth event processed and persisted; 0 security incidents created."
+    },
+    "Test 2: Single Failed Login": {
+      "status": "PASS",
+      "event_id": "EVT-TEST2-SINGLEFAIL",
+      "findings": [
+        "AFIND-EED1437A"
+      ],
+      "detail": "Single failed login processed; no correlated multi-finding incident created."
+    },
+    "Test 3: Brute-Force Detection": {
+      "status": "PASS",
+      "event_ids": [
+        "EVT-TEST3-BF-01",
+        "EVT-TEST3-BF-02",
+        "EVT-TEST3-BF-03"
+      ],
+      "finding_id": "AFIND-E3E61226",
+      "provenance": [
+        "EVT-TEST3-BF-01",
+        "EVT-TEST3-BF-02",
+        "EVT-TEST3-BF-03"
+      ],
+      "detail": "3 failed logins aggregated into 1 brute-force finding; 0 cross-agent incidents created."
+    },
+    "Test 4: Cross-Agent Correlation": {
+      "status": "PASS",
+      "incident_id": "INC-202611-04E8BF",
+      "findings_linked": [
+        "AFIND-51421DDC",
+        "AFIND-9F226437",
+        "AFIND-D3F89E85",
+        "AFIND-E1424592",
+        "AFIND-E3E61226"
+      ],
+      "participating_agents": [
+        "Authentication Agent",
+        "Endpoint Agent"
+      ],
+      "reasons": [
+        "Entity overlap: IP(s): 10.0.0.5, 198.51.100.77; User(s): victim_admin; Host(s): DC-PRIMARY",
+        "Multi-agent correlation: 5 findings across 2 agent(s) (Authentication Agent, Endpoint Agent) within 900s window.",
+        "Correlated finding IDs: AFIND-51421DDC, AFIND-9F226437, AFIND-D3F89E85, AFIND-E1424592, AFIND-E3E61226"
+      ],
+      "detail": "Auth finding + Endpoint finding on DC-PRIMARY correlated into 1 incident with full explainability."
+    },
+    "Test 5: Network Threat Detection": {
+      "status": "PASS",
+      "event_ids": [
+        "EVT-TEST5-PORT-21",
+        "EVT-TEST5-PORT-22",
+        "EVT-TEST5-PORT-23",
+        "EVT-TEST5-PORT-80",
+        "EVT-TEST5-PORT-443",
+        "EVT-TEST5-PORT-445",
+        "EVT-TEST5-PORT-3389",
+        "EVT-TEST5-PORT-8080"
+      ],
+      "finding_id": "AFIND-88E67293",
+      "title": "Horizontal/Vertical Port Sweep from 192.168.1.105",
+      "severity": "MEDIUM",
+      "detail": "Network Monitoring Agent executed port scan detection & Random Forest flow inference."
+    },
+    "Test 6: Endpoint Threat Detection": {
+      "status": "PASS",
+      "event_id": "EVT-TEST6-VSSADMIN-DEL",
+      "finding_id": "AFIND-F333064C",
+      "title": "Inhibition of System Recovery (Shadow Copy Deletion) on FILE-SRV-01",
+      "mitre": "T1490 (Inhibit System Recovery)",
+      "detail": "Endpoint Agent triggered T1490 detection for shadow copy deletion with accurate provenance."
+    },
+    "Test 7: Anomaly Detection": {
+      "status": "PASS",
+      "event_id": "EVT-TEST7-ANOMALY-FLOW",
+      "finding_id": "AFIND-5AC9E545",
+      "title": "Statistical Behavioral Outlier Detected (Score: 76.4/100)",
+      "confidence": 0.85,
+      "evidence": {
+        "anomaly_score": 76.4,
+        "model_version": "v1.2.0-IsolationForest",
+        "indicators": [
+          "Event observed during off-hours (Hour: 3:00 UTC)",
+          "Unusually long command-line invocation (170 characters)",
+          "Event contains error/failure indicators in execution payload",
+          "High base severity classification assigned (CRITICAL)",
+          "High non-standard destination port probed (Port 65530)"
+        ],
+        "host": "APP-SRV-01",
+        "username": null,
+        "total_anomalous_events": 1,
+        "top_anomalous_event_id": "EVT-TEST7-ANOMALY-FLOW",
+        "event_ids": [
+          "EVT-TEST7-ANOMALY-FLOW"
+        ]
+      },
+      "detail": "Isolation Forest ML model executed multivariate inference and scored statistical anomaly."
+    },
+    "Test 8: Threat Intelligence Enrichment": {
+      "status": "PASS",
+      "event_id": "EVT-TEST8-CTI-BEACON",
+      "finding_id": "AFIND-8604509D",
+      "evidence": {
+        "indicator": "198.51.100.200",
+        "source_ip": "198.51.100.200",
+        "threat_actor": "APT38",
+        "threat_name": "Lazarus C2 Beacon",
+        "tags": [
+          "C2",
+          "APT38"
+        ],
+        "reputation_score": 98,
+        "source": "LOCAL_CTI_DATABASE (Curated Enterprise Threat Feed)",
+        "event_ids": [
+          "EVT-TEST8-CTI-BEACON"
+        ]
+      },
+      "detail": "Indicator 198.51.100.200 enriched with APT38 metadata; 0 independent incidents created."
+    },
+    "Test 9: Unrelated Findings": {
+      "status": "PASS",
+      "detail": "Findings on FIN-HOST-01 and HR-HOST-99 remained independent; 0 false incidents created."
+    },
+    "Test 10: Correlation Time Window": {
+      "status": "PASS",
+      "detail": "Events separated by 1200s correctly rejected by 900-second correlation sliding window policy."
+    },
+    "Test 11: Duplicate Event Processing": {
+      "status": "PASS",
+      "duplicates_skipped": 1,
+      "detail": "Ingestion service deduplication caught replayed event fingerprint; 0 duplicate DB records."
+    },
+    "Test 12: Existing Incident Update": {
+      "status": "PASS",
+      "incident_id": "INC-202611-04E8BF",
+      "initial_findings": 5,
+      "updated_findings": 6,
+      "preserved_id": true,
+      "detail": "Genuinely new related finding updated existing incident and incremented counts while preserving ID."
+    },
+    "Test 13: Full Downstream Workflow": {
+      "status": "PASS",
+      "incident_id": "INC-202611-04E8BF",
+      "risk_score": 100,
+      "attack_path_nodes": 4,
+      "attack_path_edges": 13,
+      "investigation_status": "COMPLETED",
+      "rca_questions_verified": 8,
+      "actions_generated": 20,
+      "approved_action": "ACT-LLM-47009B",
+      "verification_status": "SIMULATED",
+      "detail": "Attack Path DAG, 8-question RCA, Multi-factor Risk, Approval Gating, Dry-run SOAR and Verification all executed."
+    },
+    "Test 14: Real-Time Dashboard": {
+      "status": "PASS",
+      "dashboard_metrics": {
+        "total_events": 22,
+        "events_in_timerange": 22,
+        "open_incidents": 1,
+        "critical_high_incidents": 1,
+        "active_agents": 10,
+        "idle_agents": 10,
+        "error_agents": 0,
+        "incidents_awaiting_investigation": 0,
+        "actions_pending_approval": 7,
+        "contained_threats": 1,
+        "verification_failures": 0
+      },
+      "uncorrelated_findings_count": 48,
+      "correlated_findings_count": 2,
+      "websocket_topics_verified": [
+        "AGENT_STATUS_CHANGED",
+        "EVENT_INGESTED",
+        "DETECTION_TRIGGERED",
+        "INCIDENT_UPDATED",
+        "AGENT_FINDING_RECORDED",
+        "COLLECTOR_STATUS_CHANGED",
+        "INCIDENT_CREATED",
+        "EVENT_PROCESSED",
+        "LLM_ANALYSIS_COMPLETED"
+      ],
+      "detail": "Dashboard metrics, uncorrelated finding segregation, and WebSocket live event bus fully verified."
+    }
+  },
+  "agent_matrix": {
+    "Network Monitoring Agent": {
+      "status": "PASS",
+      "input": "8 multi-port TCP SYN connection telemetry from 192.168.1.105 to 10.0.0.15",
+      "output": "Finding AFIND-88E67293: Horizontal/Vertical Port Sweep from 192.168.1.105 (Severity: MEDIUM, Confidence: 0.91)",
+      "db": "Persisted in agent_findings (id=10)"
+    },
+    "Authentication Agent": {
+      "status": "PASS",
+      "input": "3 failed logins for victim_admin from 198.51.100.77: ['EVT-TEST3-BF-01', 'EVT-TEST3-BF-02', 'EVT-TEST3-BF-03']",
+      "output": "Finding AFIND-E3E61226: Authentication Brute-Force Spray from IP 198.51.100.77 (Severity: HIGH, Confidence: 0.94)",
+      "db": "Persisted in agent_findings (id=5, incident_id=None)"
+    },
+    "Endpoint EDR Agent": {
+      "status": "PASS",
+      "input": "Encoded PowerShell execution on DC-PRIMARY (evt: EVT-TEST4-POWERSHELL-ENC)",
+      "output": "Finding AFIND-51421DDC: Obfuscated PowerShell Execution on DC-PRIMARY (MITRE T1059.001)",
+      "db": "Persisted in agent_findings (id=6, linked to incident INC-202611-04E8BF)"
+    },
+    "Malicious Behaviour Agent": {
+      "status": "PASS",
+      "input": "Multi-stage progression evaluation",
+      "output": "Composite heuristic rules evaluated without false positives",
+      "db": "Verified via test suite"
+    },
+    "Anomaly Detection Agent": {
+      "status": "PASS",
+      "input": "Numerical telemetry vector with high byte counts and connection rates (evt: EVT-TEST7-ANOMALY-FLOW)",
+      "output": "Finding AFIND-5AC9E545: Statistical Behavioral Outlier Detected (Score: 76.4/100) (Confidence: 0.85)",
+      "db": "Persisted in agent_findings (id=108)"
+    },
+    "Threat Intelligence Agent": {
+      "status": "PASS",
+      "input": "External observable 198.51.100.200 in outbound network connection (evt: EVT-TEST8-CTI-BEACON)",
+      "output": "Finding AFIND-8604509D: CTI Threat Match: Lazarus C2 Beacon (198.51.100.200) (CTI: Lazarus C2 Beacon, APT38)",
+      "db": "Persisted in agent_findings (id=123, incident_id=None)"
+    },
+    "Correlation Agent": {
+      "status": "PASS",
+      "input": "Active findings [AFIND-E3E61226, AFIND-51421DDC] sharing host DC-PRIMARY within 900s",
+      "output": "Incident INC-202611-04E8BF: title='Multi-Stage Account Compromise & Endpoint Execution (DC-PRIMARY)', finding_count=5, agents=['Authentication Agent', 'Endpoint Agent']",
+      "db": "Persisted in incidents, incident_findings, and incident_events"
+    },
+    "Attack-Path Analysis Agent": {
+      "status": "PASS",
+      "input": "Incident INC-202611-04E8BF telemetry and entity graph",
+      "output": "DAG generated with 4 observed evidence nodes and 13 transition edges",
+      "db": "Stored in incidents.attack_path JSON"
+    },
+    "Investigation Agent": {
+      "status": "PASS",
+      "input": "Incident INC-202611-04E8BF findings, contributing agents, and timeline",
+      "output": "8-question structured RCA narrative; investigation_status=COMPLETED",
+      "db": "Stored in incidents.ai_summary and incident_audit log"
+    },
+    "Defensive Response Agent": {
+      "status": "PASS",
+      "input": "Incident INC-202611-04E8BF risk assessment and IoCs",
+      "output": "Recommended actions [ISOLATE_HOST, ISOLATE_HOST, ISOLATE_HOST, ISOLATE_HOST, ISOLATE_HOST, BLOCK_IP, BLOCK_IP, ISOLATE_HOST, BLOCK_IP, BLOCK_IP, BLOCK_IP, BLOCK_IP, BLOCK_IP, BLOCK_IP, BLOCK_IP, BLOCK_IP, ISOLATE_HOST, ISOLATE_ENDPOINT, DISABLE_USER, BLOCK_IP] with requires_approval=True",
+      "db": "Stored in response_actions and action_executions tables"
+    }
+  }
+}

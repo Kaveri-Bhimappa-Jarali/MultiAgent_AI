@@ -11,7 +11,7 @@ class NetworkMonitoringAgent(BaseAgent):
 
     def analyze(self, context: Dict[str, Any]) -> Dict[str, Any]:
         events: List[SecurityEvent] = context.get("events", [])
-        network_events = [e for e in events if e.event_type == "network_connection"]
+        network_events = [e for e in events if e.event_type in ["network_connection", "network_traffic", "network"]]
         self.log("INFO", f"Ingested {len(network_events)} network telemetry events for flow analysis")
 
         findings_summary = []
@@ -47,6 +47,8 @@ class NetworkMonitoringAgent(BaseAgent):
         # Check port diversity per source IP
         for src, ports in scanned_ips.items():
             if len(ports) >= 3:
+                sweep_evts = [e for e in network_events if (e.source_ip or "unknown") == src and e.destination_port in ports]
+                sweep_event_ids = [e.event_id for e in sweep_evts]
                 self.record_finding(
                     title=f"Horizontal/Vertical Port Sweep from {src}",
                     severity="HIGH" if len(ports) > 8 else "MEDIUM",
@@ -55,12 +57,14 @@ class NetworkMonitoringAgent(BaseAgent):
                     evidence={
                         "source_ip": src,
                         "unique_ports": sorted(list(ports))[:15],
-                        "total_ports_targeted": len(ports)
+                        "total_ports_targeted": len(ports),
+                        "event_ids": sweep_event_ids
                     },
                     recommendations=[
                         f"Deploy automated egress/ingress drop rule for {src}",
                         "Inspect target host service configurations for unauthorized service exposure"
-                    ]
+                    ],
+                    source_event_ids=sweep_event_ids
                 )
                 findings_summary.append(f"Port sweep detected from {src}")
 
@@ -72,17 +76,19 @@ class NetworkMonitoringAgent(BaseAgent):
                     confidence=0.97,
                     description=f"Host {c2_evt.host or c2_evt.source_ip} initiated network traffic to known threat infrastructure at {c2_evt.destination_ip}:{c2_evt.destination_port} ({c2_desc}).",
                     evidence={
-                        "source": c2_evt.source_ip,
+                        "source_ip": c2_evt.source_ip,
                         "destination_ip": c2_evt.destination_ip,
                         "destination_port": c2_evt.destination_port,
                         "host": c2_evt.host,
                         "protocol": c2_evt.protocol,
-                        "threat_classification": c2_desc
+                        "threat_classification": c2_desc,
+                        "event_ids": [c2_evt.event_id]
                     },
                     recommendations=[
                         f"Block remote destination {c2_evt.destination_ip} on perimeter gateway",
                         f"Isolate local endpoint {c2_evt.host} to prevent lateral C2 expansion"
-                    ]
+                    ],
+                    source_event_ids=[c2_evt.event_id]
                 )
                 findings_summary.append(f"C2 Beaconing identified to {c2_evt.destination_ip}")
 
@@ -94,7 +100,7 @@ class NetworkMonitoringAgent(BaseAgent):
                 confidence=ml_res.get("confidence", 0.92),
                 description=ml_res.get("explanation"),
                 evidence={
-                    "event_id": ml_evt.event_id,
+                    "event_ids": [ml_evt.event_id],
                     "source_ip": ml_evt.source_ip,
                     "destination_ip": ml_evt.destination_ip,
                     "destination_port": ml_evt.destination_port,
@@ -105,7 +111,8 @@ class NetworkMonitoringAgent(BaseAgent):
                 recommendations=[
                     f"Deploy network firewall rule to block {ml_evt.source_ip}",
                     "Initiate packet capture on target network interface for forensic analysis"
-                ]
+                ],
+                source_event_ids=[ml_evt.event_id]
             )
             findings_summary.append(f"ML Intrusion Flow identified from {ml_evt.source_ip}")
 

@@ -1,0 +1,187 @@
+{
+  "stages": {
+    "stage_1": {
+      "events_ingested": 3,
+      "event_ids": [
+        "EVT-SIM-BF-001",
+        "EVT-SIM-BF-002",
+        "EVT-SIM-BF-003"
+      ],
+      "auth_findings_count": 3,
+      "finding_id": "AFIND-502D7774",
+      "incidents_created": 0
+    },
+    "stage_2": {
+      "events_ingested": 1,
+      "event_id": "EVT-SIM-EP-001",
+      "total_events": 4,
+      "total_findings": 7,
+      "incident_id": "INC-202611-A17B01",
+      "participating_agents": [
+        "Authentication Agent",
+        "Endpoint Agent"
+      ]
+    },
+    "stage_3": {
+      "events_ingested": 3,
+      "event_ids": [
+        "EVT-SIM-NET-001",
+        "EVT-SIM-NET-002",
+        "EVT-SIM-NET-003"
+      ],
+      "total_events": 7,
+      "total_findings": 28,
+      "incident_id": "INC-202611-A17B01"
+    },
+    "stage_4": {
+      "events_ingested": 1,
+      "event_id": "EVT-SIM-PRIV-001",
+      "total_events": 8,
+      "total_findings": 33,
+      "incident_id": "INC-202611-A17B01"
+    }
+  },
+  "db_counts_initial": {
+    "security_events": 0,
+    "agent_findings": 0,
+    "incidents": 0,
+    "incident_findings": 0,
+    "incident_events": 0,
+    "response_actions": 0,
+    "pending_approvals": 0,
+    "executed_actions": 0,
+    "verification_results": 0,
+    "detection_findings": 0,
+    "agent_executions": 0,
+    "llm_findings": 0,
+    "correlation_agent_findings": 0
+  },
+  "db_counts_final": {
+    "security_events": 8,
+    "agent_findings": 33,
+    "incidents": 1,
+    "incident_findings": 11,
+    "incident_events": 8,
+    "response_actions": 8,
+    "pending_approvals": 3,
+    "executed_actions": 5,
+    "verification_results": 1,
+    "detection_findings": 7,
+    "agent_executions": 44,
+    "llm_findings": 1,
+    "correlation_agent_findings": 0
+  },
+  "dashboard_counts_initial": {
+    "total_events": 0,
+    "events_in_timerange": 0,
+    "open_incidents": 0,
+    "critical_high_incidents": 0,
+    "active_agents": 10,
+    "idle_agents": 10,
+    "error_agents": 0,
+    "incidents_awaiting_investigation": 0,
+    "actions_pending_approval": 0,
+    "contained_threats": 0,
+    "verification_failures": 0
+  },
+  "dashboard_counts_final": {
+    "total_events": 8,
+    "events_in_timerange": 8,
+    "open_incidents": 1,
+    "critical_high_incidents": 1,
+    "active_agents": 10,
+    "idle_agents": 10,
+    "error_agents": 0,
+    "incidents_awaiting_investigation": 0,
+    "actions_pending_approval": 3,
+    "contained_threats": 1,
+    "verification_failures": 0
+  },
+  "incident_details": {
+    "incident_id": "INC-202611-A17B01",
+    "title": "Multi-Stage Account Compromise & Endpoint Execution (DC-PRIMARY)",
+    "severity": "CRITICAL",
+    "risk_score": 100,
+    "nodes": 4,
+    "edges": 24,
+    "ai_summary": "{\"what_happened\": \"Security operations detected an adversarial sequence consisting of 8 telemetry events across 1 host(s) and 1 user account(s). The sequence exhibits verified credential compromise, session hijacking, and local administrative privilege escalation.\", \"which_asset_was_affected\": \"Prim..."
+  },
+  "soar_details": {
+    "action_id": "ACT-LLM-0E3689",
+    "action_type": "ISOLATE_HOST",
+    "target_value": "DC-PRIMARY",
+    "status_after_simulation": "SIMULATED",
+    "verification_status": "SIMULATED"
+  },
+  "replay_details": {
+    "replayed_event_id": "EVT-SIM-BF-001",
+    "accepted": 0,
+    "duplicates_skipped": 1,
+    "total_events_after_replay": 8
+  },
+  "comparison_table": [
+    {
+      "card": "Telemetry Events",
+      "definition": "Total security telemetry ingested into SQLite store",
+      "table_query": "SELECT COUNT(*) FROM security_events",
+      "db_count": 8,
+      "api_count": 8,
+      "frontend_displayed": 8,
+      "match": true
+    },
+    {
+      "card": "Agent Findings (Stage 1)",
+      "definition": "Total specialized agent findings recorded across 10 agents",
+      "table_query": "SELECT COUNT(*) FROM agent_findings",
+      "db_count": 33,
+      "api_count": 33,
+      "frontend_displayed": 33,
+      "match": true
+    },
+    {
+      "card": "Correlated Incidents (Stage 2)",
+      "definition": "Multi-agent incidents meeting cross-agent correlation threshold",
+      "table_query": "SELECT COUNT(*) FROM incidents",
+      "db_count": 1,
+      "api_count": 1,
+      "frontend_displayed": 1,
+      "match": true
+    },
+    {
+      "card": "Directly Implemented (Stage 4)",
+      "definition": "Automated responses implemented without manual approval gating",
+      "table_query": "SELECT COUNT(*) FROM response_actions WHERE status='EXECUTED' AND requires_approval=0",
+      "db_count": 4,
+      "api_count": 0,
+      "frontend_displayed": 4,
+      "match": true
+    },
+    {
+      "card": "Manual Approvals (Gate)",
+      "definition": "High-risk actions pending mandatory human analyst sign-off",
+      "table_query": "SELECT COUNT(*) FROM response_actions WHERE status IN ('PENDING_APPROVAL','RECOMMENDED')",
+      "db_count": 3,
+      "api_count": 3,
+      "frontend_displayed": 3,
+      "match": true
+    },
+    {
+      "card": "Correlation Agent (Tab 2)",
+      "definition": "Synthesized correlation findings produced by Correlation Agent",
+      "table_query": "SELECT COUNT(*) FROM agent_findings WHERE agent_name LIKE '%Correlation%'",
+      "db_count": 0,
+      "api_count": 0,
+      "frontend_displayed": 0,
+      "match": true
+    },
+    {
+      "card": "LLM Threat Findings (Tab 3)",
+      "definition": "Correlated incidents with completed 8-question AI Root Cause Analysis",
+      "table_query": "SELECT COUNT(*) FROM incidents WHERE ai_summary IS NOT NULL",
+      "db_count": 1,
+      "api_count": 1,
+      "frontend_displayed": 1,
+      "match": true
+    }
+  ]
+}

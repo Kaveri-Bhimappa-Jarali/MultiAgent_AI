@@ -96,14 +96,6 @@ export const IngestionHealth: React.FC = () => {
         badge="Stream Telemetry"
         badgeVariant="emerald"
         description="Check real-time health of telemetry collectors, queue workers, processing latency, and WebSocket client streams."
-        workflowStep={{
-          stepNumber: 1,
-          totalSteps: 6,
-          stepName: 'Check System Health',
-          nextRoute: '/events',
-          nextLabel: 'Monitor Events (Step 2)'
-        }}
-        terms={['Security Event', 'Detection']}
         actions={
           <>
             <div className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-navy-800 border border-slate-700 text-xs font-mono">

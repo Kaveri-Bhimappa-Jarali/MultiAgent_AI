@@ -30,6 +30,7 @@ class AuthenticationAgent(BaseAgent):
             ]
             if len(failed) >= 3:
                 targeted_users = list({e.username for e in failed if e.username})
+                failed_event_ids = [e.event_id for e in failed]
                 self.record_finding(
                     title=f"Authentication Brute-Force Spray from IP {ip}",
                     severity="HIGH",
@@ -38,14 +39,33 @@ class AuthenticationAgent(BaseAgent):
                     evidence={
                         "source_ip": ip,
                         "failure_count": len(failed),
-                        "targeted_accounts": targeted_users
+                        "targeted_accounts": targeted_users,
+                        "event_ids": failed_event_ids
                     },
                     recommendations=[
                         f"Enforce adaptive MFA and temporarily throttle IP {ip}",
                         "Notify security operations of ongoing credential stuffing campaign"
-                    ]
+                    ],
+                    source_event_ids=failed_event_ids
                 )
                 findings_count += 1
+            elif 0 < len(failed) < 3:
+                for e in failed:
+                    self.record_finding(
+                        title=f"Failed Authentication Attempt ({e.username or ip})",
+                        severity="LOW" if e.severity == "LOW" else "MEDIUM",
+                        confidence=0.85,
+                        description=f"Failed authentication attempt recorded for user '{e.username}' from IP '{ip}'.",
+                        evidence={
+                            "source_ip": ip,
+                            "username": e.username,
+                            "host": e.host,
+                            "event_ids": [e.event_id]
+                        },
+                        recommendations=["Monitor account for additional consecutive failed attempts."],
+                        source_event_ids=[e.event_id]
+                    )
+                    findings_count += 1
 
         # 2. Check compromised account: failures followed by success
         for user, user_evts in user_attempts.items():
@@ -53,6 +73,7 @@ class AuthenticationAgent(BaseAgent):
                 e for e in user_evts if e.file_action == "SUCCESS_POST_BURST" or (e.severity == "INFO" and "success after" in (e.raw_payload or "").lower())
             )
             if has_burst_success:
+                user_evt_ids = [e.event_id for e in user_evts]
                 self.record_finding(
                     title=f"Probable Account Takeover for User '{user}'",
                     severity="CRITICAL",
@@ -60,13 +81,16 @@ class AuthenticationAgent(BaseAgent):
                     description=f"User account '{user}' authenticated successfully following a rapid burst of failed login attempts.",
                     evidence={
                         "compromised_user": user,
-                        "associated_events": [e.event_id for e in user_evts]
+                        "username": user,
+                        "associated_events": user_evt_ids,
+                        "event_ids": user_evt_ids
                     },
                     recommendations=[
                         f"Immediately disable user account '{user}' in identity provider sandbox",
                         f"Revoke all active OAuth sessions and refresh tokens for '{user}'",
                         "Initiate forensic audit of recent actions performed under this identity"
-                    ]
+                    ],
+                    source_event_ids=user_evt_ids
                 )
                 findings_count += 1
 

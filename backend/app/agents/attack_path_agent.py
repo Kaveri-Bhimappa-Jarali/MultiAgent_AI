@@ -21,6 +21,20 @@ class AttackPathAgent(BaseAgent):
             if rel:
                 target_inc = self.db.query(Incident).filter(Incident.incident_id == rel.incident_id).first()
 
+        if not target_inc:
+            self.log("INFO", "No established incident provided for attack-path synthesis. Skipping.")
+            return {
+                "graph": {"nodes": [], "edges": [], "summary_path": "No established incident"},
+                "entities_mapped": 0,
+                "hops_discovered": 0
+            }
+
+        # Load all events linked to the incident
+        rel_events = self.db.query(IncidentEvent).filter(IncidentEvent.incident_id == target_inc.incident_id).order_by(IncidentEvent.sequence_order).all()
+        if rel_events:
+            event_ids = [r.event_id for r in rel_events]
+            events = self.db.query(SecurityEvent).filter(SecurityEvent.event_id.in_(event_ids)).all()
+
         nodes = []
         edges = []
         node_ids = set()
@@ -115,7 +129,8 @@ class AttackPathAgent(BaseAgent):
             recommendations=[
                 "Deploy network segmentation between affected endpoint and internal sensitive databases",
                 "Review perimeter ingress rules for malicious source node"
-            ]
+            ],
+            source_event_ids=[e.event_id for e in sorted_events]
         )
 
         return {

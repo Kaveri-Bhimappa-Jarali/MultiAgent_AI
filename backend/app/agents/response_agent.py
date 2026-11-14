@@ -23,6 +23,14 @@ class ResponseAgent(BaseAgent):
             if rel:
                 target_inc = self.db.query(Incident).filter(Incident.incident_id == rel.incident_id).first()
 
+        if not target_inc:
+            self.log("INFO", "No established incident provided for response formulation. Skipping.")
+            return {
+                "incident_id": None,
+                "actions_recommended": 0,
+                "actions": []
+            }
+
         recommended_actions = []
 
         if target_inc:
@@ -111,6 +119,7 @@ class ResponseAgent(BaseAgent):
                 target_inc.response_status = "PENDING_APPROVAL"
                 self.db.commit()
 
+                inc_eids = [r.event_id for r in self.db.query(IncidentEvent).filter(IncidentEvent.incident_id == inc_id).all()]
                 self.record_finding(
                     title=f"SOAR Defensive Containment Formulated ({len(recommended_actions)} Actions)",
                     severity="HIGH",
@@ -118,12 +127,14 @@ class ResponseAgent(BaseAgent):
                     description=f"Generated policy-governed containment proposals for incident {inc_id}. Awaiting SOC analyst authorization.",
                     evidence={
                         "incident_id": inc_id,
-                        "actions": [f"{a.action_type} -> {a.target_value}" for a in recommended_actions]
+                        "actions": [f"{a.action_type} -> {a.target_value}" for a in recommended_actions],
+                        "event_ids": inc_eids
                     },
                     recommendations=[
                         "Review dry-run action parameters in Response Console",
                         "Approve and execute authorized containment actions"
-                    ]
+                    ],
+                    source_event_ids=inc_eids
                 )
 
         return {

@@ -1,16 +1,8 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
-import {
-  DashboardData,
-  AgentFinding,
-  Incident,
-  ResponseAction,
-  SecurityEvent,
-  VerificationResult
-} from '../types';
+import { DashboardData, AttentionItem, VerificationResult } from '../types';
 import { SeverityBadge } from '../components/common/SeverityBadge';
-import { StatusBadge } from '../components/common/StatusBadge';
 import {
   ShieldAlert,
   Radio,
@@ -22,1772 +14,846 @@ import {
   ArrowRight,
   RefreshCw,
   Play,
-  HelpCircle,
-  X,
-  Search,
+  Layers,
+  Server,
+  Database,
+  AlertTriangle,
   Clock,
   ShieldCheck,
-  AlertTriangle,
-  TrendingUp,
-  GitMerge,
-  Eye,
-  Lock,
-  Network,
-  Terminal,
-  Cpu,
-  Crosshair,
-  Flame,
-  Layers,
-  Sparkles,
-  Check,
-  ChevronDown,
-  ChevronUp,
-  ExternalLink,
+  FileCheck,
+  ChevronRight,
   Shield,
-  FileText,
-  Filter,
-  CheckCircle,
-  XCircle,
-  Sliders
+  Workflow,
+  CheckCircle
 } from 'lucide-react';
-import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer
-} from 'recharts';
-import { useWebSocketSubscription } from '../context/WebSocketContext';
-import { LiveLabOverview } from '../components/dashboard/LiveLabOverview';
+import { useWebSocket } from '../context/WebSocketContext';
 import { formatSocTimestamp } from '../utils/timestamps.js';
 
-// ── Agent Metadata Map ────────────────────────────────────────────────────────
-const AGENT_METADATA: Record<string, {
-  icon: React.ComponentType<{ className?: string }>;
-  color: string;
-  borderColor: string;
-  bgColor: string;
-  badge: string;
-  role: string;
-}> = {
-  'Authentication Agent': {
-    icon: Lock,
-    color: '#FBBF24',
-    borderColor: 'rgba(251,191,36,0.3)',
-    bgColor: 'rgba(251,191,36,0.1)',
-    badge: 'Tier-1 Ingest',
-    role: 'Credential & Session Inspector'
-  },
-  'Network Monitoring Agent': {
-    icon: Network,
-    color: '#38BDF8',
-    borderColor: 'rgba(56,189,248,0.3)',
-    bgColor: 'rgba(56,189,248,0.1)',
-    badge: 'Tier-1 NetFlow',
-    role: 'Perimeter & Traffic Monitor'
-  },
-  'Endpoint Agent': {
-    icon: Terminal,
-    color: '#60A5FA',
-    borderColor: 'rgba(96,165,250,0.3)',
-    bgColor: 'rgba(96,165,250,0.1)',
-    badge: 'Tier-1 EDR',
-    role: 'Host Process & File Inspector'
-  },
-  'Malicious Behaviour Agent': {
-    icon: Flame,
-    color: '#F87171',
-    borderColor: 'rgba(248,113,113,0.3)',
-    bgColor: 'rgba(248,113,113,0.1)',
-    badge: 'Heuristics',
-    role: 'Adversarial Pattern Detector'
-  },
-  'Anomaly Detection Agent': {
-    icon: Cpu,
-    color: '#C084FC',
-    borderColor: 'rgba(192,132,252,0.3)',
-    bgColor: 'rgba(192,132,252,0.1)',
-    badge: 'ML Unsupervised',
-    role: 'Baseline & Deviation Analysis'
-  },
-  'Threat Intelligence Agent': {
-    icon: Crosshair,
-    color: '#34D399',
-    borderColor: 'rgba(52,211,153,0.3)',
-    bgColor: 'rgba(52,211,153,0.1)',
-    badge: 'CTI Enrichment',
-    role: 'Indicator & Reputation Correlator'
-  },
-  'Correlation Agent': {
-    icon: GitMerge,
-    color: '#E879F9',
-    borderColor: 'rgba(232,121,249,0.4)',
-    bgColor: 'rgba(232,121,249,0.15)',
-    badge: 'Incident Synthesis',
-    role: 'Multi-Signal Aggregator'
-  },
-  'Attack Path Agent': {
-    icon: Layers,
-    color: '#818CF8',
-    borderColor: 'rgba(129,140,248,0.3)',
-    bgColor: 'rgba(129,140,248,0.1)',
-    badge: 'Topology Graph',
-    role: 'Attack Path & Graph Modeler'
-  },
-  'Investigation Agent': {
-    icon: Eye,
-    color: '#2DD4BF',
-    borderColor: 'rgba(45,212,191,0.3)',
-    bgColor: 'rgba(45,212,191,0.1)',
-    badge: '8-Question RCA',
-    role: 'Root Cause & Narrative Synthesizer'
-  },
-  'Response Agent': {
-    icon: Zap,
-    color: '#FDE047',
-    borderColor: 'rgba(253,224,71,0.3)',
-    bgColor: 'rgba(253,224,71,0.1)',
-    badge: 'SOAR Containment',
-    role: 'Defensive Action Orchestrator'
+// Helper to categorize raw security events into 4 clean labels
+function getFriendlyEventCategory(evt: any): { label: string; tag: string; badgeClass: string } {
+  const type = (evt.event_type || '').toLowerCase();
+  const fileAction = (evt.file_action || '').toLowerCase();
+  const processName = (evt.process_name || '').toLowerCase();
+
+  if (type.includes('auth') || type.includes('login') || type.includes('brute') || type.includes('credential')) {
+    return {
+      label: 'Authentication Event',
+      tag: 'Auth',
+      badgeClass: 'bg-amber-500/10 text-amber-300 border-amber-500/25'
+    };
   }
-};
+  if (type.includes('network') || type.includes('port') || type.includes('c2') || type.includes('scan') || type.includes('traffic')) {
+    return {
+      label: 'Network Anomaly',
+      tag: 'Network',
+      badgeClass: 'bg-blue-500/10 text-blue-300 border-blue-500/25'
+    };
+  }
+  if (type.includes('malware') || type.includes('ransom') || type.includes('trojan') || processName.includes('mimikatz') || fileAction.includes('encrypt')) {
+    return {
+      label: 'Malware / Exploit',
+      tag: 'Malware',
+      badgeClass: 'bg-rose-500/10 text-rose-300 border-rose-500/25'
+    };
+  }
+  return {
+    label: 'System / Process Event',
+    tag: 'System',
+    badgeClass: 'bg-purple-500/10 text-purple-300 border-purple-500/25'
+  };
+}
 
-const DEFAULT_AGENT_META = {
-  icon: Bot,
-  color: '#9B8DF2',
-  borderColor: 'rgba(155,141,242,0.3)',
-  bgColor: 'rgba(155,141,242,0.1)',
-  badge: 'AI SOC Agent',
-  role: 'Specialized Security Agent'
-};
+// Ingestion freshness calculator
+function getIngestionFreshness(recentEvents?: any[]): { status: string; details: string; isLive: boolean } {
+  if (!recentEvents || recentEvents.length === 0) {
+    return { status: 'IDLE', details: 'Waiting for telemetry', isLive: false };
+  }
+  const latest = recentEvents[0];
+  const eventTime = new Date(latest.timestamp).getTime();
+  const diffMinutes = Math.round((Date.now() - eventTime) / (1000 * 60));
 
-// ── Glossary Terms ────────────────────────────────────────────────────────────
-const GLOSSARY_TERMS = [
-  { term: 'Security Event', tag: 'Data Signal', definition: 'A single record or log message describing an activity on a computer, server, or network—such as a user signing in, a file being modified, or a network connection being opened.' },
-  { term: 'Agent Finding', tag: 'Telemetry Insight', definition: 'A specific detection signal or observation generated by a specialized autonomous agent (e.g. Authentication Agent, Network Monitoring Agent) with confidence rating and evidence.' },
-  { term: 'Correlation Agent', tag: 'Synthesis Engine', definition: 'The central AI agent that correlates fragmented detection findings and raw telemetries across time and entities into structured security incidents.' },
-  { term: 'LLM Reasoning', tag: 'Tier-3 RCA', definition: 'High-order cybersecurity narrative reasoning using large language models to answer the 8 canonical SOC questions (what happened, root cause, impact, MITRE technique, remediation).' },
-  { term: 'Autonomous SOAR', tag: 'Automated Defense', definition: 'Automatic containment execution (such as blocking an IP address) without waiting for human intervention when sufficient high-confidence evidence exists.' },
-  { term: 'Manual Approval Gate', tag: 'Human-in-the-Loop', definition: 'A security safeguard requiring a SOC analyst to review findings and supporting evidence before executing destructive or high-impact actions.' },
-  { term: 'Response Verification', tag: 'Containment Audit', definition: 'Automated telemetry probing following a response action to confirm whether the malicious behavior truly stopped.' }
-];
+  if (isNaN(diffMinutes) || diffMinutes <= 5) {
+    return { status: 'LIVE', details: 'Telemetry streaming actively', isLive: true };
+  } else if (diffMinutes < 60) {
+    return { status: 'IDLE', details: `Last log received ${diffMinutes}m ago`, isLive: false };
+  } else {
+    const diffHours = Math.round(diffMinutes / 60);
+    return { status: 'IDLE', details: `Last log received ${diffHours}h ago`, isLive: false };
+  }
+}
 
 export const Dashboard: React.FC = () => {
   const [data, setData] = useState<DashboardData | null>(null);
-  const [findings, setFindings] = useState<AgentFinding[]>([]);
-  const [incidents, setIncidents] = useState<Incident[]>([]);
-  const [responses, setResponses] = useState<ResponseAction[]>([]);
   const [verifications, setVerifications] = useState<VerificationResult[]>([]);
-  const [allEvents, setAllEvents] = useState<SecurityEvent[]>([]);
-
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeStageTab, setActiveStageTab] = useState<'all' | 'stage1' | 'stage2' | 'stage3' | 'stage4'>('all');
-  const [selectedAgentFilter, setSelectedAgentFilter] = useState<string>('ALL');
-  const [selectedSeverityFilter, setSelectedSeverityFilter] = useState<string>('ALL');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [expandedEvidenceId, setExpandedEvidenceId] = useState<string | null>(null);
-  const [busyActionId, setBusyActionId] = useState<string | null>(null);
-  const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
-  const [showGlossary, setShowGlossary] = useState(false);
-  const [glossarySearch, setGlossarySearch] = useState('');
   const [lastUpdated, setLastUpdated] = useState<string>(new Date().toISOString());
 
   const navigate = useNavigate();
-  const subscribe = useWebSocketSubscription();
+  const { subscribe } = useWebSocket();
 
-  const showToast = (text: string, type: 'success' | 'info' | 'error' = 'success') => {
-    setToastMessage({ text, type });
-    setTimeout(() => setToastMessage(null), 4500);
-  };
-
-  const fetchBusyRef = useRef(false);
-  const lastFetchRef = useRef(0);
-  const fetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const disposedRef = useRef(false);
-  const forceFeedRef = useRef(false);
-  const [feedUpdatesAvailable, setFeedUpdatesAvailable] = useState(false);
-  const pendingFeedRef = useRef<{
-    findings: AgentFinding[]; incidents: Incident[]; responses: ResponseAction[];
-    events: SecurityEvent[]; verifications: VerificationResult[];
-  } | null>(null);
-  const feedVersionRef = useRef('');
-
-  const feedVersion = (feed: NonNullable<typeof pendingFeedRef.current>) => JSON.stringify([
-    feed.findings.map(item => item.finding_id),
-    feed.incidents.map(item => [item.incident_id, item.updated_at, item.status, item.investigation_status]),
-    feed.responses.map(item => [item.action_id, item.status]),
-    feed.events.map(item => [item.event_id, item.processed_at, item.detection_status]),
-    feed.verifications,
-  ]);
-
-  const applyFeed = (feed: NonNullable<typeof pendingFeedRef.current>) => {
-    setFindings(feed.findings);
-    setIncidents(feed.incidents);
-    setResponses(feed.responses);
-    setAllEvents(feed.events);
-    setVerifications(feed.verifications);
-    feedVersionRef.current = feedVersion(feed);
-    setLastUpdated(new Date().toISOString());
-    pendingFeedRef.current = null;
-    setFeedUpdatesAvailable(false);
-  };
-
-  const fetchAllData = async () => {
-    if (disposedRef.current) return;
-    if (fetchBusyRef.current || Date.now() - lastFetchRef.current < 2000) {
-      if (!fetchTimerRef.current) fetchTimerRef.current = setTimeout(() => {
-        fetchTimerRef.current = null;
-        fetchAllData();
-      }, 2000);
-      return;
-    }
-    fetchBusyRef.current = true;
-    lastFetchRef.current = Date.now();
+  const fetchDashboard = async () => {
     try {
       setRefreshing(true);
-      const [dashSummary, findingsRes, incidentsRes, responsesRes, eventsRes, verifRes] = await Promise.all([
-        api.getDashboardSummary().catch(() => null),
-        api.getAgentFindings(100).catch(() => null),
-        api.getIncidents().catch(() => null),
-        api.getResponses().catch(() => null),
-        api.getEvents({ limit: 150 }).catch(() => null),
-        api.getVerifications().catch(() => null)
+      const [dashRes, verifRes] = await Promise.all([
+        api.getDashboardSummary(),
+        api.getVerifications().catch(() => [] as VerificationResult[])
       ]);
-
-      if (dashSummary) setData(dashSummary);
-      // A partial refresh must not empty the page or move the content being read.
-      if (findingsRes && incidentsRes && responsesRes && eventsRes && verifRes) {
-        const feed = { findings: findingsRes, incidents: incidentsRes, responses: responsesRes,
-          events: eventsRes.events || [], verifications: verifRes };
-        if (forceFeedRef.current || !feedVersionRef.current || window.scrollY < 180) {
-          applyFeed(feed);
-          forceFeedRef.current = false;
-        } else if (feedVersion(feed) !== feedVersionRef.current) {
-          pendingFeedRef.current = feed;
-          setFeedUpdatesAvailable(true);
-        }
-      }
+      setData(dashRes);
+      setVerifications(verifRes || []);
+      setLastUpdated(new Date().toISOString());
     } catch (err) {
-      console.error('Failed to load dashboard data', err);
+      console.error('Failed to load dashboard summary', err);
     } finally {
-      fetchBusyRef.current = false;
       setLoading(false);
       setRefreshing(false);
     }
   };
 
   useEffect(() => {
-    disposedRef.current = false;
-    fetchAllData();
-    const interval = setInterval(fetchAllData, 20000);
-    return () => {
-      disposedRef.current = true;
-      clearInterval(interval);
-      if (fetchTimerRef.current) clearTimeout(fetchTimerRef.current);
-      fetchTimerRef.current = null;
-    };
+    fetchDashboard();
+    const interval = setInterval(fetchDashboard, 20000);
+    return () => clearInterval(interval);
   }, []);
 
-  // WebSocket Live Subscriptions
+  // WebSocket real-time updates
   useEffect(() => {
-    // Batch incoming events so a burst produces one view update instead of one per log.
-    const incoming = new Map<string, SecurityEvent>();
-    const unsubEvent = subscribe('EVENT_INGESTED', (newEvent: SecurityEvent) => {
-      incoming.set(newEvent.event_id, newEvent);
-      if (incoming.size > 150) incoming.delete(incoming.keys().next().value);
-    });
-    const eventInterval = setInterval(() => {
-      if (!incoming.size || document.hidden) return;
-      if (window.scrollY >= 180) {
-        incoming.clear();
-        fetchAllData();
-        return;
-      }
-      const batch = Array.from(incoming.values()).reverse();
-      incoming.clear();
-      setAllEvents(prev => [...batch, ...prev.filter(event => !batch.some(item => item.event_id === event.event_id))].slice(0, 150));
+    const unsub1 = subscribe('EVENT_INGESTED', (newEvent: any) => {
+      setData((prev) => {
+        if (!prev) return prev;
+        const updatedRecent = [newEvent, ...(prev.recent_events || []).slice(0, 7)];
+        return {
+          ...prev,
+          metrics: {
+            ...prev.metrics,
+            total_events: prev.metrics.total_events + 1,
+            events_in_timerange: prev.metrics.events_in_timerange + 1
+          },
+          recent_events: updatedRecent
+        };
+      });
       setLastUpdated(new Date().toISOString());
-    }, 1000);
-
-    const unsubIncident = subscribe('INCIDENT_CREATED', () => {
-      fetchAllData();
-
     });
 
-    const unsubIncidentUpd = subscribe('INCIDENT_UPDATED', () => {
-      fetchAllData();
+    const unsub2 = subscribe('AGENT_STATUS_CHANGED', (agentUpdate: any) => {
+      setData((prev) => {
+        if (!prev) return prev;
+        const updatedAgents = (prev.agent_health || []).map((ag) => {
+          if (ag.name === agentUpdate.name) {
+            return {
+              ...ag,
+              status: agentUpdate.status,
+              last_run: new Date().toISOString(),
+              findings_count: agentUpdate.findings_count !== undefined ? agentUpdate.findings_count : ag.findings_count
+            };
+          }
+          return ag;
+        });
+        return { ...prev, agent_health: updatedAgents };
+      });
+      setLastUpdated(new Date().toISOString());
     });
 
-    const unsubLLM = subscribe('LLM_ANALYSIS_COMPLETED', (payload: any) => {
-      fetchAllData();
-
-    });
-
-    const unsubResponse = subscribe('RESPONSE_ACTION_UPDATED', () => {
-      fetchAllData();
+    const unsub3 = subscribe('INCIDENT_UPDATED', (incUpdate: any) => {
+      setData((prev) => {
+        if (!prev) return prev;
+        const exists = (prev.recent_critical_incidents || []).some((i) => i.incident_id === incUpdate.incident_id);
+        const updatedIncidents = exists
+          ? (prev.recent_critical_incidents || []).map((i) => (i.incident_id === incUpdate.incident_id ? { ...i, ...incUpdate } : i))
+          : [incUpdate, ...(prev.recent_critical_incidents || []).slice(0, 4)];
+        return {
+          ...prev,
+          metrics: {
+            ...prev.metrics,
+            open_incidents: prev.metrics.open_incidents + (exists ? 0 : 1)
+          },
+          recent_critical_incidents: updatedIncidents
+        };
+      });
+      setLastUpdated(new Date().toISOString());
     });
 
     return () => {
-      clearInterval(eventInterval);
-      unsubEvent();
-      unsubIncident();
-      unsubIncidentUpd();
-      unsubLLM();
-      unsubResponse();
+      unsub1();
+      unsub2();
+      unsub3();
     };
   }, [subscribe]);
 
-  // Handle Response Action: Allow / Deny
-  const handleAllowAction = async (actionId: string) => {
-    try {
-      setBusyActionId(actionId);
-      await api.allowResponse(actionId);
-      showToast(`Response action ${actionId} approved & executed successfully!`, 'success');
-      await fetchAllData();
-    } catch (err: any) {
-      showToast(err.message || 'Failed to approve action', 'error');
-    } finally {
-      setBusyActionId(null);
-    }
-  };
-
-  const handleDenyAction = async (actionId: string) => {
-    try {
-      setBusyActionId(actionId);
-      await api.denyResponse(actionId, 'Analyst dismissed action after manual review');
-      showToast(`Response action ${actionId} denied & dismissed`, 'info');
-      await fetchAllData();
-    } catch (err: any) {
-      showToast(err.message || 'Failed to deny action', 'error');
-    } finally {
-      setBusyActionId(null);
-    }
-  };
-
-  // Quick Demo Ingestion Trigger
-  const handleTriggerScenario = async (scenarioNum: number, scenarioName: string) => {
-    try {
-      showToast(`Ingesting attack scenario: ${scenarioName}...`, 'info');
-      await api.triggerScenario(scenarioNum);
-      showToast(`${scenarioName} dispatched! Processing multi-agent pipeline...`, 'success');
-      setTimeout(fetchAllData, 1500);
-      setTimeout(fetchAllData, 4000);
-    } catch (err: any) {
-      showToast(`Failed to trigger scenario: ${err.message}`, 'error');
-    }
-  };
-
-  const handleRunPipeline = async () => {
-    try {
-      showToast('Executing full 10-Agent SOC pipeline over latest telemetry...', 'info');
-      await api.runAgentPipeline();
-      showToast('Multi-Agent SOC pipeline executed successfully!', 'success');
-      setTimeout(fetchAllData, 1500);
-    } catch (err: any) {
-      showToast(`Pipeline execution failed: ${err.message}`, 'error');
-    }
-  };
-
-  // ── Derived Data for 4 Stages ───────────────────────────────────────────────
-
-  // Event lookup helper
-  const eventMap = useMemo(() => {
-    const map = new Map<string, SecurityEvent>();
-    allEvents.forEach(e => map.set(e.event_id, e));
-    return map;
-  }, [allEvents]);
-
-  // Stage 1: Individual Agent Findings (excluding Correlation Agent finding or showing with filter)
-  const individualAgentFindings = useMemo(() => {
-    return findings.filter(f => {
-      if (selectedAgentFilter !== 'ALL' && f.agent_name !== selectedAgentFilter) return false;
-      if (selectedSeverityFilter !== 'ALL' && f.severity !== selectedSeverityFilter) return false;
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        const matchTitle = f.title.toLowerCase().includes(q);
-        const matchDesc = f.description.toLowerCase().includes(q);
-        const matchAgent = f.agent_name.toLowerCase().includes(q);
-        const matchEvidence = JSON.stringify(f.evidence || {}).toLowerCase().includes(q);
-        if (!matchTitle && !matchDesc && !matchAgent && !matchEvidence) return false;
-      }
-      return true;
-    });
-  }, [findings, selectedAgentFilter, selectedSeverityFilter, searchQuery]);
-
-  // Stage 2: Correlation Agent Findings & Established Correlation
-  const correlationFindings = useMemo(() => {
-    return findings.filter(f => f.agent_name === 'Correlation Agent');
-  }, [findings]);
-
-  // Stage 3: LLM Threat Findings (Incidents with ai_summary / LLM analysis)
-  const llmIncidentFindings = useMemo(() => {
-    return incidents.filter(inc => Boolean(inc.ai_summary));
-  }, [incidents]);
-
-  // Stage 4: Measures with Sufficient Evidence (Direct Implementation) vs Insufficient Evidence (Requires Approval)
-  const directlyImplementedActions = useMemo(() => {
-    return responses.filter(r => {
-      // Sufficient evidence: status EXECUTED, or requires_approval is false, or approved by autonomous SOAR
-      return r.status === 'EXECUTED' || !r.requires_approval || (r.approved_by && r.approved_by.includes('Autonomous'));
-    });
-  }, [responses]);
-
-  const pendingApprovalActions = useMemo(() => {
-    return responses.filter(r => {
-      // Insufficient evidence: status PENDING_APPROVAL or RECOMMENDED, requires_approval is true
-      return (r.status === 'PENDING_APPROVAL' || r.status === 'RECOMMENDED') && r.requires_approval;
-    });
-  }, [responses]);
-
-  // Metrics
-  const metrics = data?.metrics || {
-    total_events: allEvents.length,
-    events_in_timerange: allEvents.length,
-    open_incidents: incidents.filter(i => i.status !== 'RESOLVED' && i.status !== 'FALSE_POSITIVE').length,
-    critical_high_incidents: incidents.filter(i => ['CRITICAL', 'HIGH'].includes(i.severity)).length,
-    active_agents: 10,
-    idle_agents: 10,
-    error_agents: 0,
-    incidents_awaiting_investigation: 0,
-    actions_pending_approval: pendingApprovalActions.length,
-    contained_threats: directlyImplementedActions.length,
-    verification_failures: 0
-  };
-
-  // Attack Volume Chart Data
-  const chartData = useMemo(() => {
-    const buckets: Record<string, { time: string; Authentication: number; Network: number; Malware: number; System: number }> = {};
-    const now = Date.now();
-    for (let i = 11; i >= 0; i--) {
-      const ts = now - i * 2 * 60 * 60 * 1000;
-      const label = new Date(ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
-      buckets[label] = { time: label, Authentication: 0, Network: 0, Malware: 0, System: 0 };
-    }
-    for (const evt of allEvents) {
-      const type = (evt.event_type || '').toLowerCase();
-      const evtMs = new Date(evt.timestamp).getTime();
-      if (isNaN(evtMs) || evtMs < now - 24 * 60 * 60 * 1000) continue;
-      const hourIdx = Math.floor((now - evtMs) / (2 * 60 * 60 * 1000));
-      if (hourIdx < 0 || hourIdx > 11) continue;
-      const bucket = Object.keys(buckets)[11 - hourIdx];
-      if (bucket && buckets[bucket]) {
-        if (type.includes('auth') || type.includes('login')) buckets[bucket].Authentication++;
-        else if (type.includes('network') || type.includes('scan') || type.includes('port')) buckets[bucket].Network++;
-        else if (type.includes('malware') || type.includes('ransom') || type.includes('process')) buckets[bucket].Malware++;
-        else buckets[bucket].System++;
-      }
-    }
-    return Object.values(buckets);
-  }, [allEvents]);
-
-  if (loading && !data && findings.length === 0) {
+  if (loading && !data) {
     return (
-      <div className="flex items-center justify-center min-h-[65vh]">
-        <div className="flex flex-col items-center space-y-4">
-          <div className="relative">
-            <div className="w-14 h-14 rounded-full animate-spin-slow border-2 border-royal/20 border-t-royal" />
-            <div className="absolute inset-2 rounded-full bg-royal/10 shadow-[0_0_24px_rgba(109,90,230,0.4)]" />
-          </div>
-          <p className="text-xs font-mono text-softwhite/70">Initializing Multi-Agent SOC Intelligence Feed...</p>
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="flex flex-col items-center space-y-3">
+          <RefreshCw className="w-8 h-8 text-royal animate-spin" />
+          <p className="text-xs text-mutedslate font-mono uppercase tracking-wider">Initializing Command Center...</p>
         </div>
       </div>
     );
   }
 
+  const metrics = data?.metrics || {
+    total_events: 0,
+    events_in_timerange: 0,
+    open_incidents: 0,
+    critical_high_incidents: 0,
+    active_agents: 10,
+    idle_agents: 10,
+    error_agents: 0,
+    incidents_awaiting_investigation: 0,
+    actions_pending_approval: 0,
+    contained_threats: 0,
+    verification_failures: 0
+  };
+
+  const attentionItems: AttentionItem[] = data?.attention_items || [];
+  const systemHealth = data?.system_health_components || {
+    backend_api: { name: 'Backend API', status: 'Online', details: 'FastAPI service active', is_simulated: false },
+    database: { name: 'Database', status: 'Online', details: 'SQLite relational store connected', is_simulated: false },
+    event_collection: { name: 'Event Collection', status: 'Online', details: 'Telemetry collectors active', is_simulated: false },
+    event_processing: { name: 'Event Processing', status: 'Online', details: 'Worker queue operational', is_simulated: false },
+    websocket: { name: 'WebSocket Connection', status: 'Online', details: 'Live streaming connected', is_simulated: false },
+    virtual_nodes: { name: 'Virtual Nodes', status: 'Online', details: 'Simulated node daemons active', is_simulated: true }
+  };
+
+  const agentSummary = data?.agent_summary || {
+    total: 10,
+    available: 10,
+    investigating: 0,
+    error_count: 0
+  };
+
+  const verifiedCount = verifications.filter(
+    (v) =>
+      v.verification_status === 'VERIFIED' ||
+      v.verification_status === 'VERIFIED_CONTAINED' ||
+      v.verification_status === 'SIMULATED'
+  ).length;
+
+  const isSystemHealthy = Object.values(systemHealth).every((c) => c.status === 'Online');
+  const hasActiveIncidents = metrics.open_incidents > 0 || metrics.critical_high_incidents > 0;
+  const ingestionFreshness = getIngestionFreshness(data?.recent_events);
+
   return (
-    <div className="grid grid-cols-1 gap-6 pb-12">
-      {feedUpdatesAvailable && <button
-        onClick={() => {
-          if (pendingFeedRef.current) applyFeed(pendingFeedRef.current);
-          else { forceFeedRef.current = true; fetchAllData(); }
-        }}
-        className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 rounded-full border border-sky-400/40 bg-slate-950 px-5 py-3 text-xs text-sky-200 shadow-xl"
-      >New updates available · Update feed</button>}
-
-      {/* ── TOAST NOTIFICATION ──────────────────────────────────────────────── */}
-      {toastMessage && (
-        <div
-          className={`fixed top-5 right-5 z-50 flex items-center space-x-3 px-4 py-3 rounded-xl border text-xs font-mono shadow-2xl backdrop-blur-md animate-slide-in-up ${toastMessage.type === 'success'
-            ? 'bg-emerald-950/90 border-emerald-500/40 text-emerald-200'
-            : toastMessage.type === 'error'
-              ? 'bg-rose-950/90 border-rose-500/40 text-rose-200'
-              : 'bg-indigo-950/90 border-indigo-500/40 text-indigo-200'
-            }`}
-        >
-          {toastMessage.type === 'success' ? (
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-          ) : toastMessage.type === 'error' ? (
-            <XCircle className="w-4 h-4 text-rose-400" />
-          ) : (
-            <Sparkles className="w-4 h-4 text-indigo-400" />
-          )}
-          <span>{toastMessage.text}</span>
-          <button onClick={() => setToastMessage(null)} className="opacity-60 hover:opacity-100">
-            <X className="w-3.5 h-3.5" />
-          </button>
+    <div className="space-y-6">
+      {/* 1. TOP SECTION: CLEAN PAGE HEADER & SYSTEM STATUS */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between pb-4 border-b border-navy-800 gap-4">
+        <div>
+          <div className="flex items-center space-x-3 mb-1">
+            <h1 className="text-xl font-bold tracking-tight text-softwhite font-mono uppercase">
+              Command Center
+            </h1>
+            <span
+              className={`inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold font-mono border ${
+                hasActiveIncidents
+                  ? 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                  : isSystemHealthy
+                  ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                  : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+              }`}
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  hasActiveIncidents ? 'bg-rose-400 animate-pulse' : isSystemHealthy ? 'bg-emerald-400' : 'bg-amber-400'
+                }`}
+              />
+              <span>
+                {hasActiveIncidents
+                  ? `${metrics.open_incidents} ACTIVE INCIDENT${metrics.open_incidents > 1 ? 'S' : ''}`
+                  : isSystemHealthy
+                  ? 'MONITORING ACTIVE • NOMINAL'
+                  : 'SYSTEM ATTENTION REQUIRED'}
+              </span>
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 font-mono">
+            <div className="flex items-center space-x-1">
+              <span className="text-slate-500">Telemetry:</span>
+              <span className={`font-semibold ${ingestionFreshness.isLive ? 'text-emerald-400' : 'text-slate-300'}`}>
+                {ingestionFreshness.status}
+              </span>
+              <span className="text-slate-500">({ingestionFreshness.details})</span>
+            </div>
+            <span className="text-navy-700">•</span>
+            <div className="flex items-center space-x-1">
+              <Clock className="w-3.5 h-3.5 text-slate-500" />
+              <span>Synced: {formatSocTimestamp(lastUpdated)}</span>
+            </div>
+          </div>
         </div>
-      )}
 
-      {/* ── HERO HEADER & QUICK DISPATCH ─────────────────────────────────────── */}
-      <div
-        className="p-6 rounded-2xl relative overflow-hidden"
-        style={{
-          background: 'linear-gradient(135deg, rgba(109,90,230,0.14) 0%, rgba(17,26,46,0.92) 50%, rgba(216,184,117,0.08) 100%)',
-          border: '1px solid rgba(109,90,230,0.25)',
-          boxShadow: '0 4px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05)'
-        }}
-      >
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 relative z-10">
-          <div>
-            <div className="flex flex-wrap items-center gap-3 mb-2">
-              <h1 className="text-2xl font-bold tracking-tight text-white flex items-center space-x-2.5">
-                <Shield className="w-7 h-7 text-royal" />
-                <span>Autonomous Multi-Agent AI SOC</span>
-              </h1>
-              <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span>10 Autonomous Agents Active</span>
-              </span>
-              <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/30">
-                <Sparkles className="w-3 h-3 text-purple-400" />
-                <span>LLM RCA Engine Online</span>
-              </span>
-            </div>
-            <p className="text-sm max-w-3xl leading-relaxed text-softwhite/80">
-              Autonomous end-to-end security operations: Multi-Agent Signal Detection → Correlation Agent Synthesis → LLM Threat Reasoning & RCA → Autonomous Containment vs. Analyst Approval Gating.
-            </p>
-            <div className="flex items-center space-x-3 mt-3 text-xs font-mono text-softwhite/50">
-              <Clock className="w-3.5 h-3.5 text-royal-200" />
-              <span>Last updated: {formatSocTimestamp(lastUpdated)}</span>
-            </div>
-          </div>
+        {/* Global Action Controls */}
+        <div className="flex items-center space-x-2.5">
+          <button
+            onClick={() => navigate('/demo')}
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-gold/15 text-gold border border-gold/40 hover:bg-gold/25 transition text-xs font-semibold font-mono"
+          >
+            <Play className="w-3.5 h-3.5 fill-current" />
+            <span>Launch Demo Attack</span>
+          </button>
 
-          {/* Quick Simulation Dispatcher */}
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="bg-midnight/80 p-2 rounded-xl border border-royal/20 flex flex-wrap items-center gap-1.5">
-              <span className="text-[10px] font-mono uppercase text-softwhite/50 px-2">Inject Telemetry:</span>
-              <button
-                onClick={() => handleTriggerScenario(1, 'Brute Force Attack')}
-                className="px-2.5 py-1.5 rounded-lg text-xs font-mono font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 transition flex items-center space-x-1"
-                title="Scenario 1: SSH Brute Force against Sarah Connor"
-              >
-                <Lock className="w-3 h-3" />
-                <span>Brute Force</span>
-              </button>
-              <button
-                onClick={() => handleTriggerScenario(2, 'Network Port Scan')}
-                className="px-2.5 py-1.5 rounded-lg text-xs font-mono font-medium bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/25 transition flex items-center space-x-1"
-                title="Scenario 2: Reconnaissance Port Sweep"
-              >
-                <Network className="w-3 h-3" />
-                <span>Port Scan</span>
-              </button>
-              <button
-                onClick={() => handleTriggerScenario(3, 'Privilege Escalation')}
-                className="px-2.5 py-1.5 rounded-lg text-xs font-mono font-medium bg-rose-500/15 text-rose-300 border border-rose-500/30 hover:bg-rose-500/25 transition flex items-center space-x-1"
-                title="Scenario 3: Credential Compromise & Admin Escalation"
-              >
-                <Flame className="w-3 h-3" />
-                <span>Priv Escalation</span>
-              </button>
-              <button
-                onClick={handleRunPipeline}
-                className="px-3 py-1.5 rounded-lg text-xs font-mono font-bold bg-royal/25 text-royal-200 border border-royal/40 hover:bg-royal/40 transition flex items-center space-x-1 shadow-md shadow-royal/10"
-                title="Trigger full 10-Agent pipeline across database events"
-              >
-                <Play className="w-3 h-3 fill-current" />
-                <span>Run Agent Engine</span>
-              </button>
-            </div>
-
-            <button
-              onClick={() => { forceFeedRef.current = true; fetchAllData(); }}
-              disabled={refreshing}
-              className="p-2.5 rounded-xl text-xs bg-midnight/80 text-softwhite/80 border border-white/10 hover:border-royal/40 transition"
-              title="Refresh all data"
-            >
-              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-royal-200' : ''}`} />
-            </button>
-            <button
-              onClick={() => setShowGlossary(true)}
-              className="p-2.5 rounded-xl text-xs bg-midnight/80 text-softwhite/80 border border-white/10 hover:border-royal/40 transition"
-              title="Open SOC Glossary"
-            >
-              <HelpCircle className="w-4 h-4 text-royal-200" />
-            </button>
-          </div>
+          <button
+            onClick={fetchDashboard}
+            disabled={refreshing}
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-navy-800 border border-navy-700 text-slate-300 hover:text-softwhite text-xs font-mono transition"
+            title="Refresh dashboard metrics"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-royal-300' : ''}`} />
+            <span>Sync</span>
+          </button>
         </div>
       </div>
 
-      <LiveLabOverview />
-
-      {/* ── TOP KPI METRIC CARDS ────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        {/* KPI 1: Telemetry Events */}
+      {/* 2. SECURITY METRICS: 6 COMPACT, CONSISTENT CARDS */}
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3.5">
+        {/* Metric 1 */}
         <div
           onClick={() => navigate('/events')}
-          className="cursor-pointer p-4 rounded-xl bg-midnight/70 border border-royal/20 hover:border-royal/40 transition-all duration-200 flex flex-col justify-between"
+          className="p-3.5 rounded-xl bg-navy-850 border border-navy-750 hover:border-royal/50 transition cursor-pointer flex flex-col justify-between group"
         >
-          <div className="flex items-center justify-between text-softwhite/60 text-xs font-mono mb-2">
-            <span>Telemetry Events</span>
-            <Radio className="w-4 h-4 text-cyan-400" />
+          <div className="flex items-center justify-between text-mutedslate mb-2">
+            <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400">Security Events</span>
+            <Radio className="w-4 h-4 text-royal-300 group-hover:scale-110 transition-transform" />
           </div>
-          <div className="text-2xl font-bold font-mono text-white mb-1">
-            {metrics.total_events.toLocaleString()}
-          </div>
-          <div className="text-[11px] font-mono text-emerald-400">
-            Realtime security feed
+          <div>
+            <p className="text-2xl font-bold font-mono text-softwhite">{metrics.total_events.toLocaleString()}</p>
+            <p className="text-[11px] text-emerald-400 font-mono mt-0.5">+{metrics.events_in_timerange} past 24h</p>
           </div>
         </div>
 
-        {/* KPI 2: Multi-Agent Findings */}
+        {/* Metric 2 */}
         <div
-          onClick={() => setActiveStageTab('stage1')}
-          className="cursor-pointer p-4 rounded-xl bg-midnight/70 border border-purple-500/20 hover:border-purple-500/40 transition-all duration-200 flex flex-col justify-between"
+          onClick={() => navigate('/incidents')}
+          className={`p-3.5 rounded-xl bg-navy-850 border transition cursor-pointer flex flex-col justify-between group ${
+            metrics.open_incidents > 0 ? 'border-rose-500/40 bg-rose-950/10' : 'border-navy-750 hover:border-royal/50'
+          }`}
         >
-          <div className="flex items-center justify-between text-softwhite/60 text-xs font-mono mb-2">
-            <span>Agent Findings</span>
-            <Bot className="w-4 h-4 text-purple-400" />
+          <div className="flex items-center justify-between text-mutedslate mb-2">
+            <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400">Open Incidents</span>
+            <ShieldAlert className={`w-4 h-4 group-hover:scale-110 transition-transform ${metrics.open_incidents > 0 ? 'text-rose-400' : 'text-slate-400'}`} />
           </div>
-          <div className="text-2xl font-bold font-mono text-white mb-1">
-            {findings.length}
-          </div>
-          <div className="text-[11px] font-mono text-purple-300">
-            Stage 1: Multi-Agent Signals
+          <div>
+            <p className="text-2xl font-bold font-mono text-softwhite">{metrics.open_incidents}</p>
+            <p className={`text-[11px] font-mono mt-0.5 ${metrics.critical_high_incidents > 0 ? 'text-rose-400' : 'text-slate-400'}`}>
+              {metrics.critical_high_incidents} Critical / High
+            </p>
           </div>
         </div>
 
-        {/* KPI 3: Correlated Incidents */}
+        {/* Metric 3 */}
         <div
-          onClick={() => setActiveStageTab('stage2')}
-          className="cursor-pointer p-4 rounded-xl bg-midnight/70 border border-fuchsia-500/20 hover:border-fuchsia-500/40 transition-all duration-200 flex flex-col justify-between"
+          onClick={() => navigate('/detections')}
+          className={`p-3.5 rounded-xl bg-navy-850 border transition cursor-pointer flex flex-col justify-between group ${
+            metrics.critical_high_incidents > 0 ? 'border-amber-500/40 bg-amber-950/10' : 'border-navy-750 hover:border-royal/50'
+          }`}
         >
-          <div className="flex items-center justify-between text-softwhite/60 text-xs font-mono mb-2">
-            <span>Correlated Incidents</span>
-            <GitMerge className="w-4 h-4 text-fuchsia-400" />
+          <div className="flex items-center justify-between text-mutedslate mb-2">
+            <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400">Critical Alerts</span>
+            <AlertTriangle className={`w-4 h-4 group-hover:scale-110 transition-transform ${metrics.critical_high_incidents > 0 ? 'text-amber-400' : 'text-slate-400'}`} />
           </div>
-          <div className="text-2xl font-bold font-mono text-white mb-1">
-            {incidents.length}
-          </div>
-          <div className="text-[11px] font-mono text-fuchsia-300">
-            Stage 2: Correlation Agent
+          <div>
+            <p className="text-2xl font-bold font-mono text-softwhite">{metrics.critical_high_incidents}</p>
+            <p className="text-[11px] text-mutedslate font-mono mt-0.5">Detection Engine</p>
           </div>
         </div>
 
-        {/* KPI 4: Direct Auto-Containments */}
+        {/* Metric 4 */}
         <div
-          onClick={() => setActiveStageTab('stage4')}
-          className="cursor-pointer p-4 rounded-xl bg-midnight/70 border border-emerald-500/25 hover:border-emerald-500/50 transition-all duration-200 flex flex-col justify-between shadow-[0_0_15px_rgba(52,211,153,0.08)]"
+          onClick={() => navigate('/agents')}
+          className="p-3.5 rounded-xl bg-navy-850 border border-navy-750 hover:border-royal/50 transition cursor-pointer flex flex-col justify-between group"
         >
-          <div className="flex items-center justify-between text-softwhite/60 text-xs font-mono mb-2">
-            <span>Directly Implemented</span>
-            <Zap className="w-4 h-4 text-emerald-400" />
+          <div className="flex items-center justify-between text-mutedslate mb-2">
+            <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400">AI Agents Ready</span>
+            <Bot className="w-4 h-4 text-royal-300 group-hover:scale-110 transition-transform" />
           </div>
-          <div className="text-2xl font-bold font-mono text-emerald-300 mb-1">
-            {directlyImplementedActions.length}
-          </div>
-          <div className="text-[11px] font-mono text-emerald-400 flex items-center space-x-1">
-            <CheckCircle2 className="w-3 h-3" />
-            <span>Sufficient Evidence Met</span>
+          <div>
+            <p className="text-2xl font-bold font-mono text-softwhite">{agentSummary.available} / {agentSummary.total}</p>
+            <p className="text-[11px] text-emerald-400 font-mono mt-0.5">
+              {agentSummary.investigating > 0 ? `${agentSummary.investigating} investigating` : 'Standby fleet active'}
+            </p>
           </div>
         </div>
 
-        {/* KPI 5: Pending Manual Approvals */}
+        {/* Metric 5 */}
         <div
-          onClick={() => setActiveStageTab('stage4')}
-          className="cursor-pointer p-4 rounded-xl bg-midnight/70 border border-amber-500/25 hover:border-amber-500/50 transition-all duration-200 flex flex-col justify-between shadow-[0_0_15px_rgba(251,191,36,0.08)]"
+          onClick={() => navigate('/responses')}
+          className={`p-3.5 rounded-xl bg-navy-850 border transition cursor-pointer flex flex-col justify-between group ${
+            metrics.actions_pending_approval > 0 ? 'border-amber-500/40 bg-amber-950/10' : 'border-navy-750 hover:border-royal/50'
+          }`}
         >
-          <div className="flex items-center justify-between text-softwhite/60 text-xs font-mono mb-2">
-            <span>Manual Approvals</span>
-            <AlertTriangle className="w-4 h-4 text-amber-400" />
+          <div className="flex items-center justify-between text-mutedslate mb-2">
+            <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400">Pending Approvals</span>
+            <Zap className={`w-4 h-4 group-hover:scale-110 transition-transform ${metrics.actions_pending_approval > 0 ? 'text-amber-400' : 'text-slate-400'}`} />
           </div>
-          <div className="text-2xl font-bold font-mono text-amber-300 mb-1">
-            {pendingApprovalActions.length}
+          <div>
+            <p className="text-2xl font-bold font-mono text-softwhite">{metrics.actions_pending_approval}</p>
+            <p className="text-[11px] text-amber-300 font-mono mt-0.5">SOAR Review</p>
           </div>
-          <div className="text-[11px] font-mono text-amber-400 flex items-center space-x-1">
-            <AlertOctagon className="w-3 h-3" />
-            <span>Insufficient Evidence Gate</span>
+        </div>
+
+        {/* Metric 6 */}
+        <div
+          onClick={() => navigate('/responses')}
+          className="p-3.5 rounded-xl bg-navy-850 border border-navy-750 hover:border-royal/50 transition cursor-pointer flex flex-col justify-between group"
+        >
+          <div className="flex items-center justify-between text-mutedslate mb-2">
+            <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400">Verified Responses</span>
+            <FileCheck className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold font-mono text-softwhite">{verifiedCount}</p>
+            <p className="text-[11px] text-emerald-400 font-mono mt-0.5">
+              {metrics.contained_threats} Contained
+            </p>
           </div>
         </div>
       </div>
 
-      {/* ── 4-STAGE PIPELINE NAVIGATOR (PIPELINE TABS) ────────────────────────── */}
-      <div
-        className="p-3 rounded-2xl bg-midnight/80 border border-royal/20 flex flex-wrap items-center justify-between gap-2 shadow-lg"
-      >
-        <div className="flex flex-wrap items-center gap-1.5">
-          <button
-            onClick={() => setActiveStageTab('all')}
-            className={`px-4 py-2 rounded-xl text-xs font-mono font-semibold transition-all duration-200 flex items-center space-x-2 ${activeStageTab === 'all'
-              ? 'bg-royal text-white shadow-lg shadow-royal/30'
-              : 'bg-white/5 text-softwhite/70 hover:bg-white/10'
-              }`}
-          >
-            <Sliders className="w-3.5 h-3.5" />
-            <span>All Stages (Integrated Pipeline)</span>
-          </button>
-
-          <button
-            onClick={() => setActiveStageTab('stage1')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-mono font-semibold transition-all duration-200 flex items-center space-x-2 ${activeStageTab === 'stage1'
-              ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30'
-              : 'bg-white/5 text-softwhite/70 hover:bg-white/10'
-              }`}
-          >
-            <span className="w-4 h-4 rounded-full bg-purple-500/30 text-purple-200 flex items-center justify-center text-[10px]">1</span>
-            <span>Agent Findings</span>
-            <span className="px-1.5 py-0.2 rounded bg-purple-400/20 text-purple-200 text-[10px]">{findings.length}</span>
-          </button>
-
-          <button
-            onClick={() => setActiveStageTab('stage2')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-mono font-semibold transition-all duration-200 flex items-center space-x-2 ${activeStageTab === 'stage2'
-              ? 'bg-fuchsia-600 text-white shadow-lg shadow-fuchsia-600/30'
-              : 'bg-white/5 text-softwhite/70 hover:bg-white/10'
-              }`}
-          >
-            <span className="w-4 h-4 rounded-full bg-fuchsia-500/30 text-fuchsia-200 flex items-center justify-center text-[10px]">2</span>
-            <span>Correlation Agent</span>
-            <span className="px-1.5 py-0.2 rounded bg-fuchsia-400/20 text-fuchsia-200 text-[10px]">{correlationFindings.length || incidents.length}</span>
-          </button>
-
-          <button
-            onClick={() => setActiveStageTab('stage3')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-mono font-semibold transition-all duration-200 flex items-center space-x-2 ${activeStageTab === 'stage3'
-              ? 'bg-teal-600 text-white shadow-lg shadow-teal-600/30'
-              : 'bg-white/5 text-softwhite/70 hover:bg-white/10'
-              }`}
-          >
-            <span className="w-4 h-4 rounded-full bg-teal-500/30 text-teal-200 flex items-center justify-center text-[10px]">3</span>
-            <span>LLM Threat Findings</span>
-            <span className="px-1.5 py-0.2 rounded bg-teal-400/20 text-teal-200 text-[10px]">{llmIncidentFindings.length}</span>
-          </button>
-
-          <button
-            onClick={() => setActiveStageTab('stage4')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-mono font-semibold transition-all duration-200 flex items-center space-x-2 ${activeStageTab === 'stage4'
-              ? 'bg-amber-600 text-white shadow-lg shadow-amber-600/30'
-              : 'bg-white/5 text-softwhite/70 hover:bg-white/10'
-              }`}
-          >
-            <span className="w-4 h-4 rounded-full bg-amber-500/30 text-amber-200 flex items-center justify-center text-[10px]">4</span>
-            <span>Containment: Auto vs Manual</span>
-            <span className="px-1.5 py-0.2 rounded bg-amber-400/20 text-amber-200 text-[10px]">{responses.length}</span>
-          </button>
+      {/* 3. MAIN SECURITY WORKFLOW PIPELINE (Prominent Connected Visualization) */}
+      <div className="p-5 rounded-2xl bg-navy-850 border border-navy-750 shadow-xl">
+        <div className="flex items-center justify-between mb-4 pb-3 border-b border-navy-800">
+          <div>
+            <h2 className="text-sm font-bold text-softwhite font-mono uppercase flex items-center space-x-2">
+              <Workflow className="w-4 h-4 text-royal-300" />
+              <span>End-to-End Security Operations Workflow</span>
+            </h2>
+            <p className="text-xs text-mutedslate mt-0.5">
+              Live operational lifecycle from initial telemetry capture to automated defense and containment verification.
+            </p>
+          </div>
+          <span className="text-[11px] font-mono text-slate-400 bg-navy-900 px-2.5 py-1 rounded-md border border-navy-800">
+            Pipeline: Fully Integrated
+          </span>
         </div>
 
-        <div className="flex items-center space-x-2 text-xs font-mono text-softwhite/50 px-2">
-          <Activity className="w-3.5 h-3.5 text-royal-200 animate-pulse" />
-          <span>Real-Time Engine Sync</span>
-        </div>
-      </div>
-
-      {/* ────────────────────────────────────────────────────────────────────────
-          STAGE 1: FINDINGS OF EACH OF THE AGENT (REQUIREMENT 1)
-          "the dashboard should display the findings of each of the agent along
-          with relevant timestamp and event details"
-      ──────────────────────────────────────────────────────────────────────── */}
-      {(activeStageTab === 'all' || activeStageTab === 'stage1') && (
-        <div
-          className="p-6 rounded-2xl bg-midnight/90 border border-purple-500/25 shadow-2xl relative overflow-hidden space-y-5"
-          style={{
-            background: 'linear-gradient(135deg, rgba(147,51,234,0.06) 0%, rgba(17,26,46,0.95) 100%)'
-          }}
-        >
-          {/* Header & Filter Controls */}
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-white/5">
+        {/* Horizontal Pipeline Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-2.5">
+          {/* Stage 1 */}
+          <div
+            onClick={() => navigate('/ingestion')}
+            className="p-3 rounded-xl bg-navy-900 border border-navy-750 hover:border-royal/60 transition cursor-pointer flex flex-col justify-between group"
+          >
             <div>
-              <div className="flex items-center space-x-2.5">
-                <span className="w-7 h-7 rounded-xl bg-purple-500/20 border border-purple-500/40 text-purple-300 flex items-center justify-center font-mono font-bold text-xs">
-                  1
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] font-mono text-gold font-bold">01</span>
+                <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded border ${
+                  ingestionFreshness.isLive ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' : 'bg-slate-800 text-slate-400 border-slate-700'
+                }`}>
+                  {ingestionFreshness.status}
                 </span>
-                <h2 className="text-lg font-bold text-white flex items-center space-x-2">
-                  <Bot className="w-5 h-5 text-purple-400" />
-                  <span>Stage 1: Multi-Agent Detection Findings & Event Telemetry</span>
-                </h2>
               </div>
-              <p className="text-xs text-softwhite/70 mt-1">
-                Raw detection signals recorded by specialized agents with timestamp, severity confidence, and underlying event details.
+              <h4 className="text-xs font-semibold text-softwhite group-hover:text-royal-300 transition">Data Collection</h4>
+              <p className="text-[11px] text-mutedslate mt-1 font-mono">
+                {metrics.total_events.toLocaleString()} events
               </p>
             </div>
+            <div className="mt-2.5 pt-2 border-t border-navy-800 flex items-center justify-between text-[10px] text-royal-300 font-mono">
+              <span>Inspect</span>
+              <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+            </div>
+          </div>
 
-            {/* Search & Severity Filter */}
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative">
-                <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-softwhite/40" />
-                <input
-                  type="text"
-                  placeholder="Filter events, IPs, agents..."
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="pl-8 pr-3 py-1.5 rounded-xl text-xs bg-midnight border border-royal/20 text-white placeholder-softwhite/40 font-mono focus:outline-none focus:border-purple-400"
-                />
+          {/* Stage 2 */}
+          <div
+            onClick={() => navigate('/detections')}
+            className="p-3 rounded-xl bg-navy-900 border border-navy-750 hover:border-royal/60 transition cursor-pointer flex flex-col justify-between group"
+          >
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] font-mono text-gold font-bold">02</span>
+                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
+                  12 Rules
+                </span>
               </div>
+              <h4 className="text-xs font-semibold text-softwhite group-hover:text-royal-300 transition">Threat Detection</h4>
+              <p className="text-[11px] text-mutedslate mt-1 font-mono">
+                Rules &amp; ML Isolation
+              </p>
+            </div>
+            <div className="mt-2.5 pt-2 border-t border-navy-800 flex items-center justify-between text-[10px] text-royal-300 font-mono">
+              <span>Inspect</span>
+              <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+            </div>
+          </div>
 
-              <select
-                value={selectedSeverityFilter}
-                onChange={e => setSelectedSeverityFilter(e.target.value)}
-                className="px-2.5 py-1.5 rounded-xl text-xs bg-midnight border border-royal/20 text-softwhite font-mono focus:outline-none"
+          {/* Stage 3 */}
+          <div
+            onClick={() => navigate('/agents')}
+            className="p-3 rounded-xl bg-navy-900 border border-navy-750 hover:border-royal/60 transition cursor-pointer flex flex-col justify-between group"
+          >
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] font-mono text-gold font-bold">03</span>
+                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-royal/15 text-royal-200 border border-royal/30">
+                  10 Agents
+                </span>
+              </div>
+              <h4 className="text-xs font-semibold text-softwhite group-hover:text-royal-300 transition">Multi-Agent AI</h4>
+              <p className="text-[11px] text-mutedslate mt-1 font-mono">
+                {agentSummary.investigating > 0 ? `${agentSummary.investigating} Active` : 'Autonomous fleet'}
+              </p>
+            </div>
+            <div className="mt-2.5 pt-2 border-t border-navy-800 flex items-center justify-between text-[10px] text-royal-300 font-mono">
+              <span>Inspect</span>
+              <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+            </div>
+          </div>
+
+          {/* Stage 4 */}
+          <div
+            onClick={() => navigate('/incidents')}
+            className="p-3 rounded-xl bg-navy-900 border border-navy-750 hover:border-royal/60 transition cursor-pointer flex flex-col justify-between group"
+          >
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] font-mono text-gold font-bold">04</span>
+                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
+                  Graph Correl
+                </span>
+              </div>
+              <h4 className="text-xs font-semibold text-softwhite group-hover:text-royal-300 transition">Event Correlation</h4>
+              <p className="text-[11px] text-mutedslate mt-1 font-mono">
+                Cross-entity clusters
+              </p>
+            </div>
+            <div className="mt-2.5 pt-2 border-t border-navy-800 flex items-center justify-between text-[10px] text-royal-300 font-mono">
+              <span>Inspect</span>
+              <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+            </div>
+          </div>
+
+          {/* Stage 5 */}
+          <div
+            onClick={() => navigate('/incidents')}
+            className="p-3 rounded-xl bg-navy-900 border border-navy-750 hover:border-royal/60 transition cursor-pointer flex flex-col justify-between group"
+          >
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] font-mono text-gold font-bold">05</span>
+                <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded border ${
+                  metrics.open_incidents > 0 ? 'bg-rose-500/15 text-rose-300 border-rose-500/30' : 'bg-slate-800 text-slate-400 border-slate-700'
+                }`}>
+                  {metrics.open_incidents} Open
+                </span>
+              </div>
+              <h4 className="text-xs font-semibold text-softwhite group-hover:text-royal-300 transition">Incident RCA</h4>
+              <p className="text-[11px] text-mutedslate mt-1 font-mono">
+                Root-cause triage
+              </p>
+            </div>
+            <div className="mt-2.5 pt-2 border-t border-navy-800 flex items-center justify-between text-[10px] text-royal-300 font-mono">
+              <span>Inspect</span>
+              <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+            </div>
+          </div>
+
+          {/* Stage 6 */}
+          <div
+            onClick={() => navigate('/responses')}
+            className="p-3 rounded-xl bg-navy-900 border border-navy-750 hover:border-royal/60 transition cursor-pointer flex flex-col justify-between group"
+          >
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] font-mono text-gold font-bold">06</span>
+                <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded border ${
+                  metrics.actions_pending_approval > 0 ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
+                }`}>
+                  SOAR Active
+                </span>
+              </div>
+              <h4 className="text-xs font-semibold text-softwhite group-hover:text-royal-300 transition">SOAR Response</h4>
+              <p className="text-[11px] text-mutedslate mt-1 font-mono">
+                {metrics.actions_pending_approval} Pending Review
+              </p>
+            </div>
+            <div className="mt-2.5 pt-2 border-t border-navy-800 flex items-center justify-between text-[10px] text-royal-300 font-mono">
+              <span>Inspect</span>
+              <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+            </div>
+          </div>
+
+          {/* Stage 7 */}
+          <div
+            onClick={() => navigate('/responses')}
+            className="p-3 rounded-xl bg-navy-900 border border-navy-750 hover:border-royal/60 transition cursor-pointer flex flex-col justify-between group"
+          >
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] font-mono text-gold font-bold">07</span>
+                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
+                  {verifiedCount} Verified
+                </span>
+              </div>
+              <h4 className="text-xs font-semibold text-softwhite group-hover:text-royal-300 transition">Verification</h4>
+              <p className="text-[11px] text-mutedslate mt-1 font-mono">
+                Audited containment
+              </p>
+            </div>
+            <div className="mt-2.5 pt-2 border-t border-navy-800 flex items-center justify-between text-[10px] text-royal-300 font-mono">
+              <span>Inspect</span>
+              <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 4. IMPORTANT ATTENTION ITEMS (Unresolved criticals, approvals, failures) */}
+      <div className="p-5 rounded-2xl bg-navy-850 border border-navy-750 shadow-xl">
+        <div className="flex items-center justify-between mb-4 pb-3 border-b border-navy-800">
+          <div>
+            <h2 className="text-sm font-bold text-softwhite font-mono uppercase flex items-center space-x-2">
+              <AlertOctagon className={`w-4 h-4 ${attentionItems.length > 0 ? 'text-rose-400' : 'text-emerald-400'}`} />
+              <span>Actionable Attention Items</span>
+              {attentionItems.length > 0 && (
+                <span className="px-2 py-0.5 rounded-full text-xs font-mono bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                  {attentionItems.length}
+                </span>
+              )}
+            </h2>
+            <p className="text-xs text-mutedslate mt-0.5">
+              Unresolved priority findings, pending approvals, or infrastructure anomalies requiring analyst intervention.
+            </p>
+          </div>
+        </div>
+
+        {attentionItems.length === 0 ? (
+          <div className="p-6 rounded-xl bg-navy-900 border border-emerald-500/20 flex items-center space-x-4">
+            <div className="w-9 h-9 rounded-full bg-emerald-500/15 flex items-center justify-center flex-shrink-0">
+              <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+            </div>
+            <div>
+              <h4 className="text-xs font-semibold text-emerald-300 font-mono uppercase">All Clear — Zero Unresolved Alerts</h4>
+              <p className="text-xs text-mutedslate mt-0.5">
+                No open high-priority incidents, pending response approvals, or collector errors detected across the environment.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-2.5">
+            {attentionItems.map((item) => (
+              <div
+                key={item.id}
+                className="p-3.5 rounded-xl bg-navy-900 border border-navy-750 hover:border-royal/50 transition flex flex-col md:flex-row md:items-center justify-between gap-3"
               >
-                <option value="ALL">All Severities</option>
-                <option value="CRITICAL">Critical</option>
-                <option value="HIGH">High</option>
-                <option value="MEDIUM">Medium</option>
-                <option value="LOW">Low</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Agent Filter Pills */}
-          <div className="flex flex-wrap items-center gap-1.5 pb-2">
-            {['ALL', ...Object.keys(AGENT_METADATA)].map(agentName => {
-              const meta = AGENT_METADATA[agentName] || DEFAULT_AGENT_META;
-              const isSelected = selectedAgentFilter === agentName;
-              const count = agentName === 'ALL'
-                ? findings.length
-                : findings.filter(f => f.agent_name === agentName).length;
-
-              return (
-                <button
-                  key={agentName}
-                  onClick={() => setSelectedAgentFilter(agentName)}
-                  className={`px-3 py-1.5 rounded-xl text-[11px] font-mono font-medium transition-all duration-200 flex items-center space-x-1.5 border ${isSelected
-                    ? 'bg-purple-600 text-white border-purple-400 shadow-md shadow-purple-600/30'
-                    : 'bg-midnight/70 text-softwhite/70 border-white/5 hover:border-white/20'
-                    }`}
-                >
-                  {agentName !== 'ALL' && React.createElement(meta.icon, { className: 'w-3 h-3' })}
-                  <span>{agentName === 'ALL' ? 'All Agents' : agentName.replace(' Agent', '')}</span>
-                  <span className={`px-1.5 py-0.2 rounded text-[10px] ${isSelected ? 'bg-white/20 text-white' : 'bg-white/5 text-softwhite/50'}`}>
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Findings Cards Stream */}
-          {individualAgentFindings.length === 0 ? (
-            <div className="p-8 rounded-xl bg-midnight/50 border border-white/5 text-center text-xs font-mono text-softwhite/60">
-              <Bot className="w-8 h-8 text-softwhite/30 mx-auto mb-2 animate-bounce" />
-              <p>No agent findings matching filter criteria.</p>
-              <p className="text-[11px] text-softwhite/40 mt-1">
-                Click &quot;Brute Force&quot; or &quot;Port Scan&quot; in the top bar to ingest telemetry and generate agent findings.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {individualAgentFindings.map(finding => {
-                const meta = AGENT_METADATA[finding.agent_name] || DEFAULT_AGENT_META;
-                const isExpanded = expandedEvidenceId === finding.finding_id;
-
-                // Extract linked events if available
-                const evIds: string[] = Array.isArray(finding.evidence?.event_ids)
-                  ? finding.evidence.event_ids
-                  : (finding.evidence?.event_id ? [finding.evidence.event_id] : []);
-
-                const sampleEvent = evIds.length > 0 ? eventMap.get(evIds[0]) : null;
-
-                return (
-                  <div
-                    key={finding.finding_id}
-                    data-finding-id={finding.finding_id}
-                    className="p-4 rounded-xl bg-midnight/80 border transition-colors duration-200 space-y-3"
-                    style={{
-                      borderColor: meta.borderColor,
-                      boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
-                    }}
-                  >
-                    {/* Top Row: Agent Identity, Severity, Confidence, Timestamp */}
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center space-x-2.5">
-                        <div
-                          className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                          style={{ background: meta.bgColor, color: meta.color }}
-                        >
-                          {React.createElement(meta.icon, { className: 'w-4 h-4' })}
-                        </div>
-                        <div>
-                          <div className="flex items-center space-x-2">
-                            <span className="text-xs font-bold text-white">{finding.agent_name}</span>
-                            <span
-                              className="text-[10px] font-mono px-2 py-0.5 rounded-full"
-                              style={{ background: meta.bgColor, color: meta.color, border: `1px solid ${meta.borderColor}` }}
-                            >
-                              {meta.badge}
-                            </span>
-                          </div>
-                          <p className="text-[10px] font-mono text-softwhite/50">{meta.role}</p>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col items-end space-y-1">
-                        <SeverityBadge severity={finding.severity} size="sm" />
-                        <span className="text-[10px] font-mono text-emerald-400">
-                          {Math.round(finding.confidence * 100)}% Confidence
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Finding Title & Description */}
-                    <div>
-                      <h4 className="text-sm font-semibold text-white leading-snug">{finding.title}</h4>
-                      <p className="text-xs text-softwhite/75 mt-1 leading-relaxed">{finding.description}</p>
-                    </div>
-
-                    {/* Associated Event Details Box (Requirement 1 explicit: "relevant timestamp and event details") */}
-                    <div className="p-3 rounded-lg bg-black/40 border border-white/5 space-y-2">
-                      <div className="flex items-center justify-between text-[11px] font-mono text-softwhite/60">
-                        <span className="flex items-center space-x-1.5 text-purple-300">
-                          <Radio className="w-3 h-3 text-purple-400" />
-                          <span>Event Telemetry Details</span>
-                        </span>
-                        <span className="text-[10px] text-softwhite/50">
-                          {formatSocTimestamp(finding.created_at)}
-                        </span>
-                      </div>
-
-                      {/* Event Attributes Grid */}
-                      <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
-                        <div>
-                          <span className="text-softwhite/40 block text-[10px]">Source Pivot:</span>
-                          <span className="text-amber-300 font-semibold truncate block">
-                            {sampleEvent?.source_ip || finding.evidence?.source_ip || finding.evidence?.pivot_entity || 'N/A'}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-softwhite/40 block text-[10px]">Target Asset / Host:</span>
-                          <span className="text-cyan-300 font-semibold truncate block">
-                            {sampleEvent?.host || sampleEvent?.destination_ip || finding.evidence?.host || 'Internal Asset'}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-softwhite/40 block text-[10px]">Event Type:</span>
-                          <span className="text-softwhite/90 truncate block">
-                            {sampleEvent?.event_type || finding.evidence?.event_type || 'detection_signal'}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-softwhite/40 block text-[10px]">Identity / User:</span>
-                          <span className="text-softwhite/90 truncate block">
-                            {sampleEvent?.username || finding.evidence?.username || 'System Daemon'}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Command line or payload if available */}
-                      {(sampleEvent?.command_line || sampleEvent?.raw_payload || finding.evidence?.command_line) && (
-                        <div className="mt-1 pt-1.5 border-t border-white/5 text-[10px] font-mono text-softwhite/70 truncate">
-                          <span className="text-softwhite/40">Command/Marker: </span>
-                          <span className="text-amber-200/80">
-                            {sampleEvent?.command_line || sampleEvent?.raw_payload || finding.evidence?.command_line}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Expandable Raw Evidence JSON Toggle */}
-                    <div className="pt-1 flex items-center justify-between text-[11px] font-mono">
-                      <button
-                        onClick={() => setExpandedEvidenceId(isExpanded ? null : finding.finding_id)}
-                        className="text-purple-400 hover:text-purple-300 flex items-center space-x-1"
-                      >
-                        <span>{isExpanded ? 'Hide Raw Evidence' : 'Inspect Evidence JSON'}</span>
-                        {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                      </button>
-
-                      {evIds.length > 0 && (
-                        <span className="text-softwhite/40 text-[10px]">
-                          {evIds.length} Correlated Event{evIds.length > 1 ? 's' : ''}
-                        </span>
-                      )}
-                    </div>
-
-                    {isExpanded && (
-                      <div className="p-2.5 rounded-lg bg-black/60 border border-purple-500/30 text-[10px] font-mono text-emerald-300 overflow-x-auto max-h-40">
-                        <pre>{JSON.stringify(finding.evidence, null, 2)}</pre>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ────────────────────────────────────────────────────────────────────────
-          STAGE 2: FINDINGS OF THE CORRELATION AGENT (REQUIREMENT 2)
-          "The dashboard should display the findings of the correlation agent
-          by showing the findings of each of the agent and the correlation that
-          was established"
-      ──────────────────────────────────────────────────────────────────────── */}
-      {(activeStageTab === 'all' || activeStageTab === 'stage2') && (
-        <div
-          className="p-6 rounded-2xl bg-midnight/90 border border-fuchsia-500/30 shadow-2xl relative overflow-hidden space-y-6"
-          style={{
-            background: 'linear-gradient(135deg, rgba(217,70,239,0.07) 0%, rgba(17,26,46,0.95) 100%)'
-          }}
-        >
-          {/* Header */}
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-white/5">
-            <div>
-              <div className="flex items-center space-x-2.5">
-                <span className="w-7 h-7 rounded-xl bg-fuchsia-500/20 border border-fuchsia-500/40 text-fuchsia-300 flex items-center justify-center font-mono font-bold text-xs">
-                  2
-                </span>
-                <h2 className="text-lg font-bold text-white flex items-center space-x-2">
-                  <GitMerge className="w-5 h-5 text-fuchsia-400" />
-                  <span>Stage 2: Correlation Agent Findings & Established Synthesis</span>
-                </h2>
-              </div>
-              <p className="text-xs text-softwhite/70 mt-1">
-                Displays the synthesis established by the Correlation Agent: clusters fragmented agent findings across temporal proximity and entity pivots into unified incidents.
-              </p>
-            </div>
-
-            <div className="flex items-center space-x-2 text-xs font-mono text-fuchsia-300">
-              <span className="px-3 py-1 rounded-full bg-fuchsia-500/15 border border-fuchsia-500/30">
-                {incidents.length} Established Incident Correlation{incidents.length !== 1 ? 's' : ''}
-              </span>
-            </div>
-          </div>
-
-          {/* Correlation Established Cards */}
-          {incidents.length === 0 ? (
-            <div className="p-8 rounded-xl bg-midnight/50 border border-white/5 text-center text-xs font-mono text-softwhite/60">
-              <GitMerge className="w-8 h-8 text-fuchsia-400/40 mx-auto mb-2" />
-              <p>No correlated incidents established yet.</p>
-              <p className="text-[11px] text-softwhite/40 mt-1">
-                Run an attack scenario or multi-agent engine to trigger the Correlation Agent.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {incidents.map(incident => {
-                // Find matching correlation finding from Correlation Agent
-                const matchingFinding = correlationFindings.find(
-                  f => f.title.includes(incident.incident_id) || (f.evidence?.incident_id === incident.incident_id)
-                );
-
-                const corrEvidence = matchingFinding?.evidence || {};
-                const contributingAgents: string[] = corrEvidence.contributing_agents || [
-                  'Authentication Agent',
-                  'Network Monitoring Agent',
-                  'Endpoint Agent',
-                  'Anomaly Detection Agent'
-                ];
-
-                // Find individual agent findings that contributed to this incident
-                const relatedAgentFindings = findings.filter(f => {
-                  if (f.agent_name === 'Correlation Agent') return false;
-                  // If finding has incident_id match
-                  if (f.evidence?.incident_id === incident.incident_id) return true;
-                  // If finding has overlapping entity (IP, host, user)
-                  const pivot = corrEvidence.pivot_entity || incident.affected_ips[0] || incident.affected_hosts[0];
-                  if (pivot && JSON.stringify(f.evidence || {}).includes(pivot)) return true;
-                  return false;
-                });
-
-                return (
-                  <div
-                    key={incident.incident_id}
-                    className="p-5 rounded-2xl bg-midnight/90 border border-fuchsia-500/30 shadow-xl space-y-4"
-                  >
-                    {/* Header: Incident ID, Title, Severity, Risk Score */}
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-white/5">
-                      <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="px-2.5 py-0.5 rounded font-mono text-xs font-bold bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30">
-                            {incident.incident_id}
-                          </span>
-                          <SeverityBadge severity={incident.severity} size="sm" />
-                          <StatusBadge status={incident.status} />
-                          <span className="text-xs font-mono text-softwhite/50">
-                            {incident.event_count} Events Correlated
-                          </span>
-                        </div>
-                        <h3 className="text-base font-bold text-white">{incident.title}</h3>
-                        <p className="text-xs text-softwhite/75">{incident.description}</p>
-                      </div>
-
-                      {/* Risk Score Meter */}
-                      <div className="flex items-center space-x-3 bg-black/40 px-4 py-2.5 rounded-xl border border-white/5">
-                        <div className="text-right">
-                          <span className="text-[10px] font-mono uppercase text-softwhite/50 block">Risk Score</span>
-                          <span className={`text-xl font-bold font-mono ${incident.risk_score >= 80 ? 'text-rose-400' : 'text-amber-400'}`}>
-                            {incident.risk_score} / 100
-                          </span>
-                        </div>
-                        <div className="w-10 h-10 rounded-full border-2 border-fuchsia-500/40 flex items-center justify-center font-mono font-bold text-xs text-fuchsia-300">
-                          {Math.round(incident.confidence * 100)}%
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Established Correlation Dossier (Why, How, When, Pivot Entity) */}
-                    <div className="p-4 rounded-xl bg-black/40 border border-fuchsia-500/20 space-y-3">
-                      <div className="flex items-center justify-between text-xs font-mono text-fuchsia-300 pb-2 border-b border-white/5">
-                        <span className="font-bold flex items-center space-x-1.5">
-                          <GitMerge className="w-4 h-4 text-fuchsia-400" />
-                          <span>Correlation Synthesis Established by Correlation Agent</span>
-                        </span>
-                        <span className="text-[11px] text-softwhite/50">
-                          Window: {formatSocTimestamp(incident.first_seen)} → {formatSocTimestamp(incident.last_seen)}
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs font-mono">
-                        {/* Pivot Entity */}
-                        <div className="p-3 rounded-lg bg-midnight/70 border border-white/5 space-y-1">
-                          <span className="text-softwhite/40 text-[10px] uppercase block">Clustering Pivot Entity</span>
-                          <span className="text-amber-300 font-bold text-sm block">
-                            {corrEvidence.pivot_entity || incident.affected_ips[0] || incident.affected_hosts[0] || '185.220.101.45'}
-                          </span>
-                          <span className="text-[10px] text-softwhite/50 block">
-                            Spatio-temporal entity cluster anchor
-                          </span>
-                        </div>
-
-                        {/* Why Correlated */}
-                        <div className="p-3 rounded-lg bg-midnight/70 border border-white/5 space-y-1 md:col-span-2">
-                          <span className="text-softwhite/40 text-[10px] uppercase block">Why Correlated</span>
-                          <p className="text-softwhite/90 text-xs leading-relaxed font-sans">
-                            {corrEvidence.why || `Clustered ${incident.event_count} security telemetry signals around pivot entity displaying sequential adversarial traversal with peak severity ${incident.severity}.`}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* How Correlated */}
-                      {corrEvidence.how && (
-                        <div className="p-2.5 rounded-lg bg-midnight/50 border border-white/5 text-[11px] font-mono text-softwhite/75">
-                          <span className="text-fuchsia-300 font-semibold">How Correlated: </span>
-                          <span>{corrEvidence.how}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Contributing Agents Matrix (Requirement 2 explicit: "showing the findings of each of the agent") */}
-                    <div className="space-y-2.5 pt-2">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-xs font-mono uppercase font-bold text-softwhite/70 flex items-center space-x-1.5">
-                          <Layers className="w-3.5 h-3.5 text-fuchsia-400" />
-                          <span>Contributing Agents & Individual Signal Findings ({contributingAgents.length} Agents)</span>
-                        </h4>
-                        <span className="text-[11px] font-mono text-softwhite/50">
-                          {relatedAgentFindings.length} Correlated Findings Joined
-                        </span>
-                      </div>
-
-                      {/* Contributing Agent Badges */}
-                      <div className="flex flex-wrap items-center gap-2">
-                        {contributingAgents.map(agName => {
-                          const meta = AGENT_METADATA[agName] || DEFAULT_AGENT_META;
-                          return (
-                            <span
-                              key={agName}
-                              className="px-2.5 py-1 rounded-lg text-xs font-mono font-medium flex items-center space-x-1.5 border"
-                              style={{ background: meta.bgColor, color: meta.color, borderColor: meta.borderColor }}
-                            >
-                              {React.createElement(meta.icon, { className: 'w-3 h-3' })}
-                              <span>{agName}</span>
-                            </span>
-                          );
-                        })}
-                      </div>
-
-                      {/* Correlated Individual Agent Findings Sub-Cards */}
-                      {relatedAgentFindings.length > 0 && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 mt-2">
-                          {relatedAgentFindings.slice(0, 4).map(subF => {
-                            const subMeta = AGENT_METADATA[subF.agent_name] || DEFAULT_AGENT_META;
-                            return (
-                              <div
-                                key={subF.finding_id}
-                                className="p-3 rounded-lg bg-black/30 border border-white/5 space-y-1"
-                              >
-                                <div className="flex items-center justify-between">
-                                  <span className="text-[11px] font-bold" style={{ color: subMeta.color }}>
-                                    {subF.agent_name}
-                                  </span>
-                                  <SeverityBadge severity={subF.severity} size="sm" />
-                                </div>
-                                <p className="text-xs font-semibold text-white truncate">{subF.title}</p>
-                                <p className="text-[11px] text-softwhite/60 line-clamp-2">{subF.description}</p>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* View Full Incident Detail CTA */}
-                    <div className="pt-2 flex justify-end">
-                      <button
-                        onClick={() => navigate(`/incidents/${incident.incident_id}`)}
-                        className="px-3 py-1.5 rounded-lg text-xs font-mono font-semibold bg-fuchsia-500/20 text-fuchsia-200 border border-fuchsia-500/40 hover:bg-fuchsia-500/30 transition flex items-center space-x-1.5"
-                      >
-                        <span>Open Incident Detail & Attack Graph</span>
-                        <ArrowRight className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ────────────────────────────────────────────────────────────────────────
-          STAGE 3: LLM FINDINGS (OUTPUT OF CORRELATION AGENT -> LLM) (REQUIREMENT 3)
-          "Then show the LLM findings i.e., basically the the output of correlation
-          agent will go to the llm and it will make some findings and those findings
-          need to displayed on to the dashboard"
-      ──────────────────────────────────────────────────────────────────────── */}
-      {(activeStageTab === 'all' || activeStageTab === 'stage3') && (
-        <div
-          className="p-6 rounded-2xl bg-midnight/90 border border-teal-500/30 shadow-2xl relative overflow-hidden space-y-6"
-          style={{
-            background: 'linear-gradient(135deg, rgba(20,184,166,0.07) 0%, rgba(17,26,46,0.95) 100%)'
-          }}
-        >
-          {/* Header */}
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-white/5">
-            <div>
-              <div className="flex items-center space-x-2.5">
-                <span className="w-7 h-7 rounded-xl bg-teal-500/20 border border-teal-500/40 text-teal-300 flex items-center justify-center font-mono font-bold text-xs">
-                  3
-                </span>
-                <h2 className="text-lg font-bold text-white flex items-center space-x-2">
-                  <Eye className="w-5 h-5 text-teal-400" />
-                  <span>Stage 3: LLM Threat Reasoning & Root Cause Analysis (RCA)</span>
-                </h2>
-              </div>
-              <p className="text-xs text-softwhite/70 mt-1">
-                Output of the Correlation Agent ingested by Tier-3 LLM reasoning engine (Gemini-1.5-Flash / Cybersecurity Expert Reasoning Model) producing structured 8-question narrative answers.
-              </p>
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <span className="px-3 py-1 rounded-full text-xs font-mono bg-teal-500/15 border border-teal-500/30 text-teal-300 flex items-center space-x-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-teal-400" />
-                <span>Gemini 1.5 & Local Expert Reasoner</span>
-              </span>
-            </div>
-          </div>
-
-          {/* LLM Findings Cards */}
-          {llmIncidentFindings.length === 0 ? (
-            <div className="p-8 rounded-xl bg-midnight/50 border border-white/5 text-center text-xs font-mono text-softwhite/60">
-              <Eye className="w-8 h-8 text-teal-400/40 mx-auto mb-2" />
-              <p>No LLM investigation syntheses generated yet.</p>
-              <p className="text-[11px] text-softwhite/40 mt-1">
-                Ingest an attack scenario or click &quot;Run Agent Engine&quot; to synthesize LLM findings.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {llmIncidentFindings.map(incident => {
-                const ai = incident.ai_summary!;
-
-                return (
-                  <div
-                    key={incident.incident_id}
-                    className="p-5 rounded-2xl bg-midnight/90 border border-teal-500/30 shadow-xl space-y-5"
-                  >
-                    {/* Top Ingestion Source Banner */}
-                    <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl bg-black/40 border border-teal-500/20 text-xs font-mono">
-                      <div className="flex items-center space-x-2">
-                        <span className="text-teal-400 font-bold">Ingested Correlation Cluster:</span>
-                        <span className="px-2 py-0.5 rounded bg-teal-500/20 text-teal-200 border border-teal-500/30 font-bold">
-                          {incident.incident_id}
-                        </span>
-                        <span className="text-softwhite/60">({incident.title})</span>
-                      </div>
-                      <div className="flex items-center space-x-2 text-[11px] text-softwhite/50">
-                        <span>Analyzed: {ai.generated_at ? formatSocTimestamp(ai.generated_at) : formatSocTimestamp(incident.created_at)}</span>
-                      </div>
-                    </div>
-
-                    {/* Executive Threat Verdict & Classification */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                      <div className="p-3.5 rounded-xl bg-midnight/70 border border-white/5 space-y-1">
-                        <span className="text-softwhite/40 text-[10px] uppercase font-mono block">Executive Verdict</span>
-                        <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-xs font-bold font-mono bg-rose-500/20 text-rose-300 border border-rose-500/40">
-                          <AlertOctagon className="w-3 h-3 text-rose-400" />
-                          <span>CONFIRMED_ATTACK</span>
-                        </span>
-                      </div>
-
-                      <div className="p-3.5 rounded-xl bg-midnight/70 border border-white/5 space-y-1">
-                        <span className="text-softwhite/40 text-[10px] uppercase font-mono block">Confidence Level</span>
-                        <span className="text-lg font-bold font-mono text-teal-300 block">
-                          {Math.round(incident.confidence * 100)}% Verified
-                        </span>
-                      </div>
-
-                      <div className="p-3.5 rounded-xl bg-midnight/70 border border-white/5 space-y-1 md:col-span-2">
-                        <span className="text-softwhite/40 text-[10px] uppercase font-mono block">MITRE ATT&CK Classification</span>
-                        <span className="text-xs font-bold font-mono text-amber-300 block truncate">
-                          {Array.isArray((ai as any).which_techniques_were_observed)
-                            ? (ai as any).which_techniques_were_observed.join(', ')
-                            : 'T1110.001 (Password Guessing) · T1046 (Network Scanning)'}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Canonical 8-Question Root Cause Analysis (RCA) Grid */}
-                    <div className="space-y-2">
-                      <h4 className="text-xs font-mono uppercase font-bold text-teal-300 flex items-center space-x-1.5">
-                        <FileText className="w-3.5 h-3.5 text-teal-400" />
-                        <span>Canonical 8-Question SOC Root Cause Analysis</span>
-                      </h4>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                        {/* Q1: What Happened? */}
-                        <div className="p-3.5 rounded-xl bg-black/40 border border-white/5 space-y-1">
-                          <span className="text-teal-400 font-mono font-bold text-[11px] block">1. What Happened?</span>
-                          <p className="text-softwhite/85 leading-relaxed">{ai.what_happened}</p>
-                        </div>
-
-                        {/* Q2: Which Asset Affected? */}
-                        <div className="p-3.5 rounded-xl bg-black/40 border border-white/5 space-y-1">
-                          <span className="text-teal-400 font-mono font-bold text-[11px] block">2. Which Asset Was Affected?</span>
-                          <p className="text-softwhite/85 leading-relaxed">{ai.affected_systems_and_accounts}</p>
-                        </div>
-
-                        {/* Q3: How Did It Begin? */}
-                        <div className="p-3.5 rounded-xl bg-black/40 border border-white/5 space-y-1">
-                          <span className="text-teal-400 font-mono font-bold text-[11px] block">3. What Initiated The Activity?</span>
-                          <p className="text-softwhite/85 leading-relaxed">{ai.how_did_it_begin}</p>
-                        </div>
-
-                        {/* Q4: What Was The Impact? */}
-                        <div className="p-3.5 rounded-xl bg-black/40 border border-white/5 space-y-1">
-                          <span className="text-teal-400 font-mono font-bold text-[11px] block">4. What Was The Impact?</span>
-                          <p className="text-softwhite/85 leading-relaxed">
-                            {(ai as any).what_was_the_impact || `Peak severity ${incident.severity}. Potential credential compromise and host session takeover.`}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Likely Attack Sequence */}
-                      {ai.likely_attack_sequence && (
-                        <div className="p-3 rounded-xl bg-black/50 border border-teal-500/20 text-xs font-mono text-softwhite/90">
-                          <span className="text-teal-300 font-bold block mb-1">Observed Attack Traversal Sequence:</span>
-                          <span className="text-amber-200/90">{ai.likely_attack_sequence}</span>
-                        </div>
-                      )}
-
-                      {/* Supporting Evidence List */}
-                      {ai.evidence_supporting && ai.evidence_supporting.length > 0 && (
-                        <div className="p-3 rounded-xl bg-black/40 border border-white/5 space-y-1 text-xs font-mono">
-                          <span className="text-softwhite/50 text-[10px] uppercase block">Grounded Supporting Evidence</span>
-                          <ul className="list-disc list-inside space-y-0.5 text-softwhite/80">
-                            {ai.evidence_supporting.map((evItem, idx) => (
-                              <li key={idx} className="truncate">{evItem}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
-                      {/* Recommended Measures by LLM */}
-                      {ai.next_steps && ai.next_steps.length > 0 && (
-                        <div className="p-3 rounded-xl bg-emerald-950/30 border border-emerald-500/30 space-y-1 text-xs font-mono">
-                          <span className="text-emerald-400 font-bold text-[11px] block flex items-center space-x-1.5">
-                            <Zap className="w-3.5 h-3.5 text-emerald-400" />
-                            <span>Remediation Measures Recommended by LLM:</span>
-                          </span>
-                          <ul className="list-disc list-inside space-y-0.5 text-emerald-200/90">
-                            {ai.next_steps.map((stepItem, idx) => (
-                              <li key={idx}>{stepItem}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ────────────────────────────────────────────────────────────────────────
-          STAGE 4: AUTOMATED IMPLEMENTATION VS MANUAL APPROVAL GATE (REQUIREMENT 4)
-          "Next thing is for a particular event if it has sufficient evidences then
-          it can directly implement the measures suggested by the llm and it gets
-          displayed onto the dashboard and if the evidences are not sufficeint than
-          it requirers manual approval and the findings and its relevamt evidences
-          need to be displayed"
-      ──────────────────────────────────────────────────────────────────────── */}
-      {(activeStageTab === 'all' || activeStageTab === 'stage4') && (
-        <div
-          className="p-6 rounded-2xl bg-midnight/90 border border-amber-500/30 shadow-2xl relative overflow-hidden space-y-6"
-          style={{
-            background: 'linear-gradient(135deg, rgba(245,158,11,0.07) 0%, rgba(17,26,46,0.95) 100%)'
-          }}
-        >
-          {/* Header */}
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-white/5">
-            <div>
-              <div className="flex items-center space-x-2.5">
-                <span className="w-7 h-7 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 flex items-center justify-center font-mono font-bold text-xs">
-                  4
-                </span>
-                <h2 className="text-lg font-bold text-white flex items-center space-x-2">
-                  <Zap className="w-5 h-5 text-amber-400" />
-                  <span>Stage 4: SOAR Policy — Direct Implementation vs. Manual Approval Gate</span>
-                </h2>
-              </div>
-              <p className="text-xs text-softwhite/70 mt-1">
-                High-confidence attacks with sufficient evidence (≥85% threshold / Critical risk) are directly implemented by autonomous SOAR. Ambiguous cases require human analyst authorization.
-              </p>
-            </div>
-
-            <div className="flex items-center space-x-2 text-xs font-mono">
-              <span className="px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300">
-                {directlyImplementedActions.length} Directly Implemented
-              </span>
-              <span className="px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300">
-                {pendingApprovalActions.length} Pending Approval
-              </span>
-            </div>
-          </div>
-
-          {/* 2-Column Layout: Column A (Direct Implementation) vs Column B (Manual Approval Gate) */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-            {/* ── PANEL A: DIRECTLY IMPLEMENTED MEASURES (SUFFICIENT EVIDENCE) ── */}
-            <div className="p-5 rounded-2xl bg-black/40 border border-emerald-500/30 shadow-xl space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-white/5">
-                <div className="flex items-center space-x-2">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                    <Zap className="w-4 h-4" />
+                <div className="flex items-start space-x-3">
+                  <div className="mt-0.5">
+                    <SeverityBadge severity={item.severity} size="sm" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-white">Directly Implemented Measures</h3>
-                    <p className="text-[11px] font-mono text-emerald-400">Sufficient Evidence Met (Autonomous SOAR)</p>
-                  </div>
-                </div>
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                  {directlyImplementedActions.length} Executed
-                </span>
-              </div>
-
-              {directlyImplementedActions.length === 0 ? (
-                <div className="p-6 text-center text-xs font-mono rounded-xl bg-midnight/50 border border-white/5 text-softwhite/50">
-                  <CheckCircle2 className="w-6 h-6 text-emerald-400/40 mx-auto mb-2" />
-                  <p>No directly implemented actions recorded yet.</p>
-                  <p className="text-[10px] mt-1 text-softwhite/40">
-                    High severity events with ≥85% confidence automatically execute containment here.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-3.5">
-                  {directlyImplementedActions.map(action => (
-                    <div
-                      key={action.action_id}
-                      className="p-4 rounded-xl bg-midnight/85 border border-emerald-500/30 space-y-3 shadow-md"
-                    >
-                      {/* Action Header */}
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <div className="flex items-center space-x-2">
-                            <span className="text-xs font-mono font-bold text-emerald-300">
-                              {action.action_type}
-                            </span>
-                            <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold">
-                              ⚡ DIRECTLY IMPLEMENTED
-                            </span>
-                          </div>
-                          <span className="text-sm font-bold text-white mt-0.5 block">
-                            Target: {action.target_value} ({action.target_type})
-                          </span>
-                        </div>
-
-                        <div className="text-right text-[10px] font-mono text-softwhite/50">
-                          <StatusBadge status={action.status} />
-                          <span className="block mt-1">
-                            {action.executed_at ? formatSocTimestamp(action.executed_at) : formatSocTimestamp(action.created_at)}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Reason & Expected Effect */}
-                      <div className="p-2.5 rounded-lg bg-black/40 border border-white/5 space-y-1 text-xs">
-                        <p className="text-softwhite/90">
-                          <span className="text-softwhite/40 font-mono text-[11px]">Reason: </span>
-                          {action.reason}
-                        </p>
-                        <p className="text-emerald-300/90 text-[11px] font-mono">
-                          <span className="text-softwhite/40">Expected Effect: </span>
-                          {action.expected_effect}
-                        </p>
-                      </div>
-
-                      {/* Evidence Threshold Justification */}
-                      <div className="p-2.5 rounded-lg bg-emerald-950/40 border border-emerald-500/25 text-[11px] font-mono text-emerald-200/90 space-y-1">
-                        <span className="font-bold flex items-center space-x-1.5 text-emerald-400">
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>Sufficient Evidence Criteria Satisfied:</span>
-                        </span>
-                        <p className="text-[10px] text-emerald-300/80">
-                          ✓ Multi-agent confidence score exceeds 85% policy threshold.
-                          <br />
-                          ✓ Correlated telemetry exhibits repeated high-velocity adversarial signature.
-                          <br />
-                          ✓ Enforced by {action.approved_by || 'Autonomous SOAR Engine (LLM-Gated)'}.
-                        </p>
-                      </div>
+                    <div className="flex items-center space-x-2">
+                      <h4 className="text-xs font-semibold text-softwhite">{item.title}</h4>
+                      <span className="text-[10px] font-mono uppercase px-2 py-0.2 rounded bg-navy-800 text-slate-400 border border-navy-700">
+                        {item.category.replace('_', ' ')}
+                      </span>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* ── PANEL B: MEASURES REQUIRING MANUAL APPROVAL (INSUFFICIENT EVIDENCE) ── */}
-            <div className="p-5 rounded-2xl bg-black/40 border border-amber-500/30 shadow-xl space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-white/5">
-                <div className="flex items-center space-x-2">
-                  <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center">
-                    <AlertTriangle className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-white">Measures Requiring Manual Approval</h3>
-                    <p className="text-[11px] font-mono text-amber-400">Insufficient Evidence / Analyst Gate</p>
+                    <p className="text-xs text-mutedslate mt-1">{item.description}</p>
+                    <p className="text-[10px] text-slate-500 font-mono mt-1">Logged: {formatSocTimestamp(item.timestamp)}</p>
                   </div>
                 </div>
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                  {pendingApprovalActions.length} Pending
-                </span>
-              </div>
 
-              {pendingApprovalActions.length === 0 ? (
-                <div className="p-6 text-center text-xs font-mono rounded-xl bg-midnight/50 border border-white/5 text-softwhite/50">
-                  <CheckCircle2 className="w-6 h-6 text-emerald-400 mx-auto mb-2" />
-                  <p>No actions waiting for analyst approval.</p>
-                  <p className="text-[10px] mt-1 text-softwhite/40">
-                    All containment measures are either already executed or verified.
-                  </p>
+                <div className="flex-shrink-0 self-end md:self-center">
+                  <button
+                    onClick={() => navigate(item.action_url)}
+                    className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-royal/15 text-royal-200 border border-royal/40 hover:bg-royal/25 text-xs font-semibold font-mono transition"
+                  >
+                    <span>{item.action_label}</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
                 </div>
-              ) : (
-                <div className="space-y-3.5">
-                  {pendingApprovalActions.map(action => (
-                    <div
-                      key={action.action_id}
-                      className="p-4 rounded-xl bg-midnight/85 border border-amber-500/40 space-y-3 shadow-md"
-                    >
-                      {/* Action Header */}
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <div className="flex items-center space-x-2">
-                            <span className="text-xs font-mono font-bold text-amber-300">
-                              {action.action_type}
-                            </span>
-                            <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold animate-pulse">
-                              ⚠️ REQUIRES MANUAL APPROVAL
-                            </span>
-                          </div>
-                          <span className="text-sm font-bold text-white mt-0.5 block">
-                            Target: {action.target_value} ({action.target_type})
-                          </span>
-                        </div>
-
-                        <div className="text-right text-[10px] font-mono text-softwhite/50">
-                          <StatusBadge status={action.status} />
-                          <span className="block mt-1">
-                            {formatSocTimestamp(action.created_at)}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Reason & Expected Effect */}
-                      <div className="p-2.5 rounded-lg bg-black/40 border border-white/5 space-y-1 text-xs">
-                        <p className="text-softwhite/90">
-                          <span className="text-softwhite/40 font-mono text-[11px]">Proposed Reason: </span>
-                          {action.reason}
-                        </p>
-                        <p className="text-amber-200/90 text-[11px] font-mono">
-                          <span className="text-softwhite/40">Expected Effect: </span>
-                          {action.expected_effect}
-                        </p>
-                      </div>
-
-                      {/* Display of Findings & Relevant Evidences (Requirement 4 explicit: "and the findings and its relevamt evidences need to be displayed") */}
-                      <div className="p-2.5 rounded-lg bg-amber-950/30 border border-amber-500/30 text-[11px] font-mono text-amber-200/90 space-y-1.5">
-                        <span className="font-bold flex items-center space-x-1.5 text-amber-400">
-                          <AlertTriangle className="w-3.5 h-3.5" />
-                          <span>Relevant Findings & Evidence Dossier:</span>
-                        </span>
-                        <div className="text-[10px] text-amber-200/80 space-y-1 pl-1">
-                          <p>• Linked Incident: {action.incident_id}</p>
-                          <p>• Evidence Status: Confidence &lt;85% threshold or ambiguous multi-stage lateral signal.</p>
-                          <p>• Risk Evaluation: Human-in-the-loop analyst sign-off required to prevent potential operational disruption.</p>
-                        </div>
-                      </div>
-
-                      {/* Interactive Analyst Gate Controls: ALLOW & DENY */}
-                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-white/5">
-                        <span className="text-[10px] font-mono text-softwhite/50">
-                          Action ID: {action.action_id}
-                        </span>
-
-                        <div className="flex items-center space-x-2">
-                          <button
-                            onClick={() => handleDenyAction(action.action_id)}
-                            disabled={busyActionId === action.action_id}
-                            className="px-3 py-1.5 rounded-xl text-xs font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30 transition flex items-center space-x-1.5 disabled:opacity-50"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                            <span>Deny & Dismiss</span>
-                          </button>
-
-                          <button
-                            onClick={() => handleAllowAction(action.action_id)}
-                            disabled={busyActionId === action.action_id}
-                            className="px-3.5 py-1.5 rounded-xl text-xs font-mono font-bold bg-emerald-500/25 text-emerald-200 border border-emerald-500/50 hover:bg-emerald-500/35 transition flex items-center space-x-1.5 shadow-lg shadow-emerald-500/20 disabled:opacity-50"
-                          >
-                            {busyActionId === action.action_id ? (
-                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <Check className="w-3.5 h-3.5" />
-                            )}
-                            <span>Allow & Implement</span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── 24H ATTACK VOLUME ANALYTICS & RECENT TELEMETRY ─────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Attack Volume Chart */}
-        <div
-          className="lg:col-span-2 p-5 rounded-2xl bg-midnight/90 border border-royal/20 shadow-xl space-y-4"
-        >
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <h3 className="text-base font-bold text-white flex items-center space-x-2">
-                <TrendingUp className="w-5 h-5 text-royal-200" />
-                <span>Recent telemetry by category</span>
-              </h3>
-              <p className="text-xs text-softwhite/60">Latest 150 events within 24 hours · 2-hour intervals · includes simulated events</p>
-            </div>
-            <div className="flex items-center gap-3 text-[11px] font-mono">
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-amber-400" />Auth</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-blue-400" />Network</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-rose-400" />Malware</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-purple-400" />System</span>
-            </div>
-          </div>
-
-          <ResponsiveContainer width="100%" height={180}>
-            <AreaChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
-              <XAxis dataKey="time" tick={{ fill: 'rgba(148,163,184,0.5)', fontSize: 10, fontFamily: 'monospace' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: 'rgba(148,163,184,0.5)', fontSize: 10, fontFamily: 'monospace' }} axisLine={false} tickLine={false} allowDecimals={false} />
-              <Tooltip
-                contentStyle={{ background: '#0B1020', border: '1px solid rgba(109,90,230,0.4)', borderRadius: 10 }}
-              />
-              <Area isAnimationActive={false} type="monotone" dataKey="Authentication" stroke="#FCD34D" fill="#FCD34D" fillOpacity={0.15} strokeWidth={1.5} />
-              <Area isAnimationActive={false} type="monotone" dataKey="Network" stroke="#60A5FA" fill="#60A5FA" fillOpacity={0.15} strokeWidth={1.5} />
-              <Area isAnimationActive={false} type="monotone" dataKey="Malware" stroke="#F87171" fill="#F87171" fillOpacity={0.15} strokeWidth={1.5} />
-              <Area isAnimationActive={false} type="monotone" dataKey="System" stroke="#C084FC" fill="#C084FC" fillOpacity={0.15} strokeWidth={1.5} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* System Health Component Status */}
-        <div className="p-5 rounded-2xl bg-midnight/90 border border-royal/20 shadow-xl space-y-3">
-          <div className="flex items-center justify-between pb-2 border-b border-white/5">
-            <h3 className="text-base font-bold text-white flex items-center space-x-2">
-              <Activity className="w-5 h-5 text-emerald-400" />
-              <span>Pipeline Health</span>
-            </h3>
-            <button
-              onClick={() => navigate('/health-monitor')}
-              className="text-xs font-mono text-royal-200 hover:text-white flex items-center space-x-1"
-            >
-              <span>Monitor</span>
-              <ArrowRight className="w-3 h-3" />
-            </button>
-          </div>
-
-          <div className="space-y-2 text-xs font-mono">
-            {[
-              { name: 'FastAPI Core Service', status: 'Online', desc: 'Port 8000 Active' },
-              { name: 'SQLite Relational DB', status: 'Online', desc: 'Store Synchronized' },
-              { name: 'Multi-Agent Worker Loop', status: 'Online', desc: '10 Agents Polling' },
-              { name: 'WebSocket Realtime Bus', status: 'Online', desc: 'Telemetry Streaming' },
-              { name: 'SOAR Containment Dispatcher', status: 'Online', desc: 'LLM Policy Gated' }
-            ].map(svc => (
-              <div key={svc.name} className="p-2.5 rounded-lg bg-black/40 border border-white/5 flex items-center justify-between">
-                <div>
-                  <span className="font-semibold text-white block">{svc.name}</span>
-                  <span className="text-[10px] text-softwhite/50">{svc.desc}</span>
-                </div>
-                <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center space-x-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                  <span>{svc.status}</span>
-                </span>
               </div>
             ))}
           </div>
-        </div>
+        )}
       </div>
 
-      {/* ── GLOSSARY MODAL ──────────────────────────────────────────────────── */}
-      {showGlossary && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="w-full max-w-2xl bg-midnight border border-royal/40 rounded-2xl p-6 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
-            <div className="flex items-center justify-between pb-3 border-b border-white/10">
-              <div className="flex items-center space-x-2">
-                <HelpCircle className="w-5 h-5 text-royal-200" />
-                <h3 className="text-base font-bold text-white">SOC Terminology & Architecture Guide</h3>
+      {/* 5. TWO-COLUMN OPERATIONAL SECTION: RECENT ACTIVITY & SYSTEM INFRASTRUCTURE */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Recent Security Activity Table (2 columns wide) */}
+        <div className="lg:col-span-2 p-5 rounded-2xl bg-navy-850 border border-navy-750 shadow-xl flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between pb-3 border-b border-navy-800 mb-3">
+              <div>
+                <h3 className="text-sm font-bold text-softwhite font-mono uppercase flex items-center space-x-2">
+                  <Radio className="w-4 h-4 text-royal-300" />
+                  <span>Recent Security Activity</span>
+                </h3>
+                <p className="text-xs text-mutedslate mt-0.5">
+                  Latest raw telemetry events captured across endpoints and network sensors.
+                </p>
               </div>
-              <button onClick={() => setShowGlossary(false)} className="text-softwhite/60 hover:text-white">
-                <X className="w-5 h-5" />
+              <button
+                onClick={() => navigate('/events')}
+                className="text-xs text-royal-300 hover:text-softwhite font-mono flex items-center space-x-1"
+              >
+                <span>View All Events</span>
+                <ArrowRight className="w-3 h-3" />
               </button>
             </div>
 
-            <div className="relative">
-              <Search className="w-4 h-4 absolute left-3 top-3 text-softwhite/40" />
-              <input
-                type="text"
-                placeholder="Search concepts, terms..."
-                value={glossarySearch}
-                onChange={e => setGlossarySearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 rounded-xl text-xs bg-black/50 border border-royal/30 text-white placeholder-softwhite/40 font-mono focus:outline-none"
-              />
+            {(!data?.recent_events || data.recent_events.length === 0) ? (
+              <div className="p-8 text-center text-xs text-mutedslate font-mono bg-navy-900/60 rounded-xl my-4">
+                No telemetry recorded in current time window. Execute a scenario in Demo Attack Lab.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-navy-800 text-slate-400 font-mono text-[10px] uppercase tracking-wider">
+                      <th className="py-2.5 px-2.5">Activity</th>
+                      <th className="py-2.5 px-2.5">Timestamp (IST)</th>
+                      <th className="py-2.5 px-2.5">Source / Entity</th>
+                      <th className="py-2.5 px-2.5">Affected Target</th>
+                      <th className="py-2.5 px-2.5">Severity</th>
+                      <th className="py-2.5 px-2.5">Origin</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-navy-800/60 font-mono">
+                    {data.recent_events.map((evt) => {
+                      const friendly = getFriendlyEventCategory(evt);
+                      return (
+                        <tr
+                          key={evt.event_id}
+                          onClick={() => navigate('/events')}
+                          className="hover:bg-navy-900/80 transition cursor-pointer"
+                        >
+                          <td className="py-2.5 px-2.5">
+                            <span className={`text-[10px] px-2 py-0.5 rounded border ${friendly.badgeClass}`}>
+                              {friendly.label}
+                            </span>
+                            <span className="text-[10px] text-slate-500 block truncate mt-0.5">
+                              {evt.event_type}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-2.5 text-slate-300 whitespace-nowrap text-[11px]">
+                            {formatSocTimestamp(evt.timestamp)}
+                          </td>
+                          <td className="py-2.5 px-2.5 text-softwhite">
+                            <span className="font-semibold block truncate max-w-[130px]">
+                              {evt.source_ip || evt.username || 'System'}
+                            </span>
+                            {evt.username && evt.source_ip && (
+                              <span className="text-[10px] text-slate-400 block truncate">User: {evt.username}</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-2.5 text-softwhite">
+                            <span className="block truncate max-w-[130px]">
+                              {evt.host || evt.destination_ip || 'Internal Network'}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-2.5 whitespace-nowrap">
+                            <SeverityBadge severity={evt.severity} size="sm" />
+                          </td>
+                          <td className="py-2.5 px-2.5 whitespace-nowrap">
+                            <span
+                              className={`text-[9px] px-2 py-0.5 rounded font-mono ${
+                                evt.is_simulated
+                                  ? 'bg-purple-900/30 text-purple-300 border border-purple-700/40'
+                                  : 'bg-emerald-900/30 text-emerald-300 border border-emerald-700/40'
+                              }`}
+                            >
+                              {evt.is_simulated ? 'Simulated Lab' : 'Live Sensor'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* System Health & Agent Fleet Summary (1 column wide) */}
+        <div className="space-y-6">
+          {/* Agent Fleet Status */}
+          <div className="p-5 rounded-2xl bg-navy-850 border border-navy-750 shadow-xl">
+            <div className="flex items-center justify-between pb-3 border-b border-navy-800 mb-3">
+              <div>
+                <h3 className="text-sm font-bold text-softwhite font-mono uppercase flex items-center space-x-2">
+                  <Bot className="w-4 h-4 text-royal-300" />
+                  <span>Agent Fleet</span>
+                </h3>
+                <p className="text-xs text-mutedslate mt-0.5">10 autonomous specialists</p>
+              </div>
+              <button
+                onClick={() => navigate('/agents')}
+                className="text-xs text-royal-300 hover:text-softwhite font-mono flex items-center space-x-1"
+              >
+                <span>All Agents</span>
+                <ArrowRight className="w-3 h-3" />
+              </button>
             </div>
 
-            <div className="space-y-3 overflow-y-auto flex-1 pr-1">
-              {GLOSSARY_TERMS.filter(g =>
-                g.term.toLowerCase().includes(glossarySearch.toLowerCase()) ||
-                g.definition.toLowerCase().includes(glossarySearch.toLowerCase())
-              ).map(item => (
-                <div key={item.term} className="p-3.5 rounded-xl bg-black/30 border border-white/5 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-sm text-white">{item.term}</span>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-royal/20 text-royal-200 border border-royal/30">
-                      {item.tag}
-                    </span>
-                  </div>
-                  <p className="text-xs text-softwhite/75 leading-relaxed">{item.definition}</p>
+            <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+              {(data?.agent_health || []).map((ag) => (
+                <div
+                  key={ag.name}
+                  onClick={() => navigate('/agents')}
+                  className="p-2 rounded-lg bg-navy-900 border border-navy-800 hover:border-royal/50 transition cursor-pointer flex items-center justify-between"
+                >
+                  <span className="truncate text-softwhite text-[11px]" title={ag.name}>
+                    {ag.name.replace(' Agent', '')}
+                  </span>
+                  <span
+                    className={`w-2 h-2 rounded-full flex-shrink-0 ml-1.5 ${
+                      ag.status === 'RUNNING'
+                        ? 'bg-royal animate-ping'
+                        : ag.status === 'FAILED'
+                        ? 'bg-rose-400'
+                        : 'bg-emerald-400'
+                    }`}
+                  />
                 </div>
               ))}
             </div>
           </div>
-        </div>
-      )}
 
+          {/* Infrastructure Health */}
+          <div className="p-5 rounded-2xl bg-navy-850 border border-navy-750 shadow-xl">
+            <div className="flex items-center justify-between pb-3 border-b border-navy-800 mb-3">
+              <div>
+                <h3 className="text-sm font-bold text-softwhite font-mono uppercase flex items-center space-x-2">
+                  <Activity className="w-4 h-4 text-emerald-400" />
+                  <span>Infrastructure</span>
+                </h3>
+                <p className="text-xs text-mutedslate mt-0.5">Core service connectivity</p>
+              </div>
+              <button
+                onClick={() => navigate('/health-monitor')}
+                className="text-xs text-royal-300 hover:text-softwhite font-mono flex items-center space-x-1"
+              >
+                <span>Monitor</span>
+                <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {Object.entries(systemHealth).map(([key, comp]) => {
+                const isOnline = comp.status === 'Online';
+                return (
+                  <div
+                    key={key}
+                    className="p-2 rounded-lg bg-navy-900 border border-navy-800 flex items-center justify-between text-xs"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                      <span className="text-softwhite text-xs font-semibold">{comp.name}</span>
+                      {comp.is_simulated && (
+                        <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-purple-900/40 text-purple-300 border border-purple-700/30">
+                          Simulated
+                        </span>
+                      )}
+                    </div>
+                    <span className={`text-[10px] font-mono ${isOnline ? 'text-emerald-400' : 'text-amber-400'}`}>
+                      {comp.status}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

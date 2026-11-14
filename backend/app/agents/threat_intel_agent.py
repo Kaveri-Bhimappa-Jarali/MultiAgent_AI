@@ -23,6 +23,8 @@ class ThreatIntelligenceAgent(BaseAgent):
             lookup = lookup_indicator(self.db, ip)
             if lookup.found and lookup.risk_level in ["MALICIOUS", "SUSPICIOUS"]:
                 details = lookup.threat_details
+                matching_evts = [e for e in events if e.source_ip == ip or e.destination_ip == ip]
+                matching_event_ids = [e.event_id for e in matching_evts]
                 self.record_finding(
                     title=f"CTI Threat Match: {details.threat_name} ({ip})",
                     severity=details.severity,
@@ -30,13 +32,16 @@ class ThreatIntelligenceAgent(BaseAgent):
                     description=f"Observable {ip} matched curated threat intelligence indicator linked to actor '{details.threat_actor}'.",
                     evidence={
                         "indicator": ip,
+                        "source_ip": ip,
                         "threat_actor": details.threat_actor,
                         "threat_name": details.threat_name,
                         "tags": details.tags,
                         "reputation_score": lookup.reputation_score,
-                        "source": lookup.source
+                        "source": lookup.source,
+                        "event_ids": matching_event_ids
                     },
-                    recommendations=lookup.recommendations
+                    recommendations=lookup.recommendations,
+                    source_event_ids=matching_event_ids
                 )
                 enriched_matches.append({
                     "indicator": ip,

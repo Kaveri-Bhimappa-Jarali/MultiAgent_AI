@@ -8,11 +8,13 @@ class AgentFindingResponse(UTCBaseModel):
     finding_id: str
     run_id: str
     agent_name: str
+    incident_id: Optional[str] = None
     title: str
     severity: str
     confidence: float
     description: str
     evidence: Dict[str, Any]
+    source_event_ids: List[str] = []
     recommendations: List[str]
     created_at: datetime
 

@@ -64,38 +64,76 @@ class MultiAgentSOCEngine:
         shared_context = {
             "batch_id": batch_id,
             "incident_id": incident_id,
-            "events": events,
-            "summary": f"Pipeline execution over {len(events)} events (Incident: {incident_id or 'General'})"
+            "events": events or [],
+            "summary": f"Pipeline execution over {len(events or [])} events (Incident: {incident_id or 'General'})"
         }
 
         agent_results = []
-        agents_to_run = []
 
         if agent_filter and agent_filter in AGENT_REGISTRY:
-            agents_to_run = [AGENT_REGISTRY[agent_filter]]
+            AgentClass = AGENT_REGISTRY[agent_filter]
+            agent_instance = AgentClass(self.db)
+            res = agent_instance.execute(shared_context)
+            agent_results.append(res)
+        elif incident_id:
+            # Investigating an established incident
+            downstream_agents = [
+                AttackPathAgent,
+                InvestigationAgent,
+                ResponseAgent
+            ]
+            for AgentClass in downstream_agents:
+                agent_instance = AgentClass(self.db)
+                res = agent_instance.execute(shared_context)
+                agent_results.append(res)
+
+            inc = self.db.query(Incident).filter(Incident.incident_id == incident_id).first()
+            if inc:
+                from app.services.risk_service import calculate_incident_risk
+                calculate_incident_risk(self.db, inc)
         else:
-            # Full canonical sequence
-            agents_to_run = [
+            # Full canonical sequence: Specialized detection agents first
+            detection_agents = [
                 NetworkMonitoringAgent,
                 AuthenticationAgent,
                 EndpointAgent,
                 MaliciousBehaviourAgent,
                 AnomalyDetectionAgent,
-                ThreatIntelligenceAgent,
-                CorrelationAgent,
-                AttackPathAgent,
-                InvestigationAgent,
-                ResponseAgent
+                ThreatIntelligenceAgent
             ]
+            for AgentClass in detection_agents:
+                agent_instance = AgentClass(self.db)
+                res = agent_instance.execute(shared_context)
+                agent_results.append(res)
 
-        for AgentClass in agents_to_run:
-            agent_instance = AgentClass(self.db)
-            res = agent_instance.execute(shared_context)
-            agent_results.append(res)
+            # Correlation Agent evaluates persisted findings
+            corr_agent = CorrelationAgent(self.db)
+            corr_res = corr_agent.execute(shared_context)
+            agent_results.append(corr_res)
+
+            # Downstream execution only for established / updated incidents
+            incident_ids = corr_res.get("data", {}).get("incident_ids", [])
+            for inc_id in incident_ids:
+                inc_context = dict(shared_context)
+                inc_context["incident_id"] = inc_id
+
+                path_agent = AttackPathAgent(self.db)
+                agent_results.append(path_agent.execute(inc_context))
+
+                inv_agent = InvestigationAgent(self.db)
+                agent_results.append(inv_agent.execute(inc_context))
+
+                resp_agent = ResponseAgent(self.db)
+                agent_results.append(resp_agent.execute(inc_context))
+
+                inc = self.db.query(Incident).filter(Incident.incident_id == inc_id).first()
+                if inc:
+                    from app.services.risk_service import calculate_incident_risk
+                    calculate_incident_risk(self.db, inc)
 
         return {
             "batch_id": batch_id,
-            "events_evaluated": len(events),
+            "events_evaluated": len(events or []),
             "agents_executed": len(agent_results),
             "pipeline_status": "COMPLETED",
             "results": agent_results
@@ -143,8 +181,12 @@ class MultiAgentSOCEngine:
         if any(f.detection_method == "ANOMALY_DETECTION" for f in (findings or [])):
             domain_agents.append(AnomalyDetectionAgent)
 
-        # 3. Threat Intel agent if external observable exists
-        if event.source_ip and not any(event.source_ip.startswith(p) for p in ["127.", "10.", "192.168."]):
+        # 3. Threat Intel agent if external observable exists (source or destination IP)
+        has_external_ip = (
+            (event.source_ip and not any(event.source_ip.startswith(p) for p in ["127.", "10.", "192.168.", "172.16."]))
+            or (event.destination_ip and not any(event.destination_ip.startswith(p) for p in ["127.", "10.", "192.168.", "172.16."]))
+        )
+        if has_external_ip:
             domain_agents.append(ThreatIntelligenceAgent)
 
         # 4. Malicious Behaviour agent if multi-stage or composite pattern observed
@@ -169,58 +211,89 @@ class MultiAgentSOCEngine:
                 "findings_count": len(res.get("findings", []))
             })
 
-        # 4. Correlation Agent if findings were produced or event is HIGH/CRITICAL
-        has_threat = (findings and len(findings) > 0) or event.severity in ["HIGH", "CRITICAL"]
-        if has_threat:
-            corr_agent = CorrelationAgent(self.db)
-            corr_res = corr_agent.execute(shared_context)
-            agent_results.append(corr_res)
+        from app.models.agent import AgentFinding
+        from app.services.time_utils import utc_isoformat
 
-            incident_ids = corr_res.get("data", {}).get("incident_ids", [])
-            for inc_id in incident_ids:
-                # Run Attack Path, Investigation, Response for created/updated incident
-                shared_context["incident_id"] = inc_id
+        # Collect any newly generated AgentFinding instances
+        new_agent_findings = []
+        for res in agent_results:
+            fids = res.get("findings", [])
+            if fids:
+                f_objs = self.db.query(AgentFinding).filter(AgentFinding.finding_id.in_(fids)).all()
+                new_agent_findings.extend(f_objs)
 
-                path_agent = AttackPathAgent(self.db)
-                agent_results.append(path_agent.execute(shared_context))
+        # Broadcast newly generated individual agent findings to UI
+        for af in new_agent_findings:
+            broadcaster.publish_sync("AGENT_FINDING_RECORDED", {
+                "id": af.id,
+                "finding_id": af.finding_id,
+                "agent_name": af.agent_name,
+                "title": af.title,
+                "severity": af.severity,
+                "confidence": af.confidence,
+                "description": af.description,
+                "incident_id": af.incident_id,
+                "created_at": utc_isoformat(af.created_at)
+            })
 
-                inv_agent = InvestigationAgent(self.db)
-                agent_results.append(inv_agent.execute(shared_context))
+        # 4. Correlation Agent evaluates persisted findings within the 900s window
+        corr_agent = CorrelationAgent(self.db)
+        corr_context = dict(shared_context)
+        corr_context["window_seconds"] = 900
+        corr_res = corr_agent.execute(corr_context)
+        agent_results.append(corr_res)
 
-                resp_agent = ResponseAgent(self.db)
-                agent_results.append(resp_agent.execute(shared_context))
+        created_inc_ids = corr_res.get("data", {}).get("incidents_created", [])
+        updated_inc_ids = corr_res.get("data", {}).get("incidents_updated", [])
+        incident_ids = list(set(created_inc_ids + updated_inc_ids))
 
-                # Recalculate risk score
-                inc = self.db.query(Incident).filter(Incident.incident_id == inc_id).first()
-                if inc:
-                    from app.services.risk_service import calculate_incident_risk
-                    calculate_incident_risk(self.db, inc)
+        # Downstream execution strictly for genuinely established or updated incidents
+        for inc_id in incident_ids:
+            downstream_context = dict(shared_context)
+            downstream_context["incident_id"] = inc_id
 
-                    # Trigger LLM Threat Reasoning Layer
+            path_agent = AttackPathAgent(self.db)
+            agent_results.append(path_agent.execute(downstream_context))
+
+            inv_agent = InvestigationAgent(self.db)
+            agent_results.append(inv_agent.execute(downstream_context))
+
+            resp_agent = ResponseAgent(self.db)
+            agent_results.append(resp_agent.execute(downstream_context))
+
+            # Recalculate calibrated multi-factor risk score
+            inc = self.db.query(Incident).filter(Incident.incident_id == inc_id).first()
+            if inc:
+                from app.services.risk_service import calculate_incident_risk
+                calculate_incident_risk(self.db, inc)
+
+                # Optional LLM Threat Reasoning Layer
+                try:
                     from app.services.llm_service import analyze_threat_findings
-                    try:
-                        llm_verdict = analyze_threat_findings(
-                            self.db,
-                            findings=findings or [],
-                            event=event,
-                            incident=inc
-                        )
-                        inc.investigation_status = "LLM_ANALYZED"
-                        if llm_verdict.get("response_status") == "AUTONOMOUSLY_CONTAINED":
-                            inc.response_status = "AUTONOMOUSLY_CONTAINED"
-                            inc.status = "CONTAINED"
-                        self.db.commit()
-                    except Exception as llm_err:
-                        print(f"[!] LLM analysis exception: {llm_err}")
+                    llm_verdict = analyze_threat_findings(
+                        self.db,
+                        findings=findings or [],
+                        event=event,
+                        incident=inc
+                    )
+                    if llm_verdict.get("response_status") == "AUTONOMOUSLY_CONTAINED":
+                        inc.response_status = "AUTONOMOUSLY_CONTAINED"
+                        inc.status = "CONTAINED"
+                    self.db.commit()
+                except Exception as llm_err:
+                    pass
 
-                    broadcaster.publish_sync("INCIDENT_UPDATED", {
-                        "incident_id": inc.incident_id,
-                        "title": inc.title,
-                        "severity": inc.severity,
-                        "risk_score": inc.risk_score,
-                        "status": inc.status,
-                        "event_count": inc.event_count
-                    })
+                event_topic = "INCIDENT_CREATED" if inc_id in created_inc_ids else "INCIDENT_UPDATED"
+                broadcaster.publish_sync(event_topic, {
+                    "incident_id": inc.incident_id,
+                    "title": inc.title,
+                    "severity": inc.severity,
+                    "risk_score": inc.risk_score,
+                    "status": inc.status,
+                    "event_count": inc.event_count,
+                    "finding_count": getattr(inc, "finding_count", 0),
+                    "participating_agents": getattr(inc, "participating_agents", [])
+                })
 
         return {
             "batch_id": batch_id,

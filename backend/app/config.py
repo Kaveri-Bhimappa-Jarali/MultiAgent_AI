@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "SOC_ENTERPRISE_ROYAL_SECRET_KEY_CHANGE_IN_PRODUCTION_9921"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
+    DEFAULT_ADMIN_PASSWORD: str = "Admin@SOC2026!"
+    DEFAULT_ANALYST_PASSWORD: str = "Analyst@SOC2026!"
     
     # Database
     DATABASE_URL: str = "sqlite:///./soc_enterprise.db"

@@ -1,0 +1,114 @@
+<USER_REQUEST>
+# CLEAN DATABASE RESET & FRESH ATTACK SIMULATION
+## Verify Multi-Agent AI SOC Dashboard Counts and Correlation Accuracy
+
+Act as a Senior SOC Engineer, Database Engineer, and QA Automation Specialist.
+
+I want you to perform a complete fresh-start test of my existing Multi-Agent AI SOC project.
+
+My current dashboard displays:
+
+- Telemetry Events: 76
+- Agent Findings: 1573
+- Correlated Incidents: 9
+- Directly Implemented: 0
+- Manual Approvals: 23
+- Agent Findings pipeline count: 1573
+- Correlation Agent count: 14
+- LLM Threat Findings: 9
+- Containment: 23
+
+I suspect that old testing records, duplicate findings, previous attack simulations, or incorrect dashboard queries may be affecting these numbers.
+
+My objective is to clear the test data safely, simulate a fresh attack from scratch, and verify whether every number displayed on the dashboard is accurate.
+
+## PHASE 1: DATABASE INSPECTION AND BACKUP
+
+Before deleting anything:
+
+1. Identify the actual database being used by the running application.
+2. Identify whether it is SQLite or another database.
+3. Identify all relevant tables, including:
+   - security_events
+   - agent_findings
+   - incidents
+   - incident_findings
+   - incident_events
+   - response_actions
+   - threat intelligence records
+   - audit logs
+   - approval records
+   - other related tables discovered in the project.
+4. Inspect foreign-key relationships and cascading deletion rules.
+5. Record the current row count of every relevant table.
+6. Identify the database currently used by the running backend.
+7. Create a complete backup before making changes.
+
+IMPORTANT:
+- Do not delete the original production or development database.
+- Do not delete user accounts, roles, configuration, ML models, datasets, or application settings.
+- Do not delete the database file blindly.
+- Do not truncate tables without understanding their dependencies.
+- Prefer a separate isolated test database for this experiment.
+- If a safe isolated database cannot be created, stop and explain the issue rather than del
+<truncated 5621 bytes>
+SE 7: DUPLICATE AND REPLAY TEST
+
+Replay one already-ingested event.
+
+Expected:
+- Duplicate event is detected.
+- No duplicate event record.
+- No duplicate finding or incident.
+- Dashboard counts remain accurate.
+
+Run correlation again and confirm idempotency.
+
+## PHASE 8: FINAL DELIVERABLE
+
+Create `FRESH_ATTACK_SIMULATION_REPORT.md` containing:
+
+1. Original database backup details.
+2. Isolated test database details.
+3. Initial clean database counts.
+4. Attack events submitted.
+5. Event IDs.
+6. Agent finding IDs.
+7. Correlated incident ID.
+8. Agent execution evidence.
+9. Investigation and attack-path results.
+10. SOAR and approval results.
+11. Database-versus-dashboard count comparison.
+12. Defects discovered.
+13. Fixes applied.
+14. Final test results.
+15. Exact commands to reproduce the fresh test.
+
+Provide screenshots of the dashboard:
+- Before the test, if available.
+- Immediately after database cleanup.
+- After brute-force detection.
+- After cross-agent incident creation.
+- After the complete incident-response workflow.
+
+## STRICT FINAL RULES
+
+- Do not delete the original database.
+- Do not invent successful detection.
+- Do not create findings or incidents directly in the database.
+- Do not bypass normal event processing.
+- Do not execute destructive attack commands.
+- Do not claim real containment when only dry-run simulation occurred.
+- Do not modify dashboard counts just to make them look correct.
+- Fix the underlying data/query issue if the displayed numbers are wrong.
+- Execute the test from a clean database and provide actual evidence.
+
+FINAL OBJECTIVE:
+
+I want to see the SOC dashboard start with zero test records, then watch a fresh synthetic attack progress through event ingestion, agent detection, correlation, incident investigation, risk assessment, and simulated response.
+
+At the end, every dashboard count must accurately reflect the actual database records and the meaning of its metric.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-11-14T17:07:57+05:30.
+</ADDITIONAL_METADATA>

@@ -29,12 +29,15 @@ class EndpointAgent(BaseAgent):
                             "host": e.host,
                             "process_name": e.process_name,
                             "command_line": e.command_line,
-                            "mitre_technique": "T1490"
+                            "user": e.username,
+                            "mitre_technique": "T1490",
+                            "event_ids": [e.event_id]
                         },
                         recommendations=[
                             f"Immediately isolate host {e.host} from network",
                             "Initiate automated ransomware containment protocol"
-                        ]
+                        ],
+                        source_event_ids=[e.event_id]
                     )
                     findings_count += 1
                 elif "powershell" in proc and ("-enc" in cmd or "downloadstring" in cmd):
@@ -47,12 +50,14 @@ class EndpointAgent(BaseAgent):
                             "host": e.host,
                             "process_name": e.process_name,
                             "command_line": e.command_line,
-                            "user": e.username
+                            "user": e.username,
+                            "event_ids": [e.event_id]
                         },
                         recommendations=[
                             f"Collect script block logs and dump process memory on {e.host}",
                             "Kill offending process PID and isolate endpoint"
-                        ]
+                        ],
+                        source_event_ids=[e.event_id]
                     )
                     findings_count += 1
 
@@ -66,12 +71,15 @@ class EndpointAgent(BaseAgent):
                     evidence={
                         "host": e.host,
                         "user": e.username,
-                        "command": e.command_line
+                        "username": e.username,
+                        "command": e.command_line,
+                        "event_ids": [e.event_id]
                     },
                     recommendations=[
                         f"Terminate active shell sessions for '{e.username}'",
                         f"Isolate host {e.host} to prevent credential dumping"
-                    ]
+                    ],
+                    source_event_ids=[e.event_id]
                 )
                 findings_count += 1
 
@@ -87,13 +95,16 @@ class EndpointAgent(BaseAgent):
                         evidence={
                             "host": e.host,
                             "user": e.username,
+                            "username": e.username,
                             "file_path": e.file_path,
-                            "action": e.file_action
+                            "action": e.file_action,
+                            "event_ids": [e.event_id]
                         },
                         recommendations=[
                             "Review file access authorization matrix",
                             "Verify whether data staging or exfiltration occurred"
-                        ]
+                        ],
+                        source_event_ids=[e.event_id]
                     )
                     findings_count += 1
 

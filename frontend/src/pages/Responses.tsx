@@ -95,14 +95,6 @@ export const Responses: React.FC = () => {
         badge="Policy Controlled"
         badgeVariant="gold"
         description="Review, simulate, and approve defensive containment actions proposed by AI agents. Verify that executed actions genuinely neutralized the threat."
-        workflowStep={{
-          stepNumber: 5,
-          totalSteps: 6,
-          stepName: 'Review & Authorize Responses',
-          nextRoute: '/responses',
-          nextLabel: 'Verify Outcomes (Step 6)'
-        }}
-        terms={['SOAR', 'Response Verification', 'Severity']}
         actions={
           <button
             onClick={() => void fetchData()}

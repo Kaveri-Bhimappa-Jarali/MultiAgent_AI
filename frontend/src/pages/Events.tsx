@@ -99,14 +99,6 @@ export const Events: React.FC = () => {
         badge="SIEM Storage"
         badgeVariant="royal"
         description="Inspect incoming security logs collected from endpoints, authentication services, and network traffic. Use search and filters to find specific events."
-        workflowStep={{
-          stepNumber: 2,
-          totalSteps: 6,
-          stepName: 'Monitor Incoming Events',
-          nextRoute: '/detections',
-          nextLabel: 'Review Detections (Step 3)'
-        }}
-        terms={['Security Event', 'Severity']}
         actions={
           <>
             <div

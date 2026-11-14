@@ -1,0 +1,286 @@
+<USER_REQUEST>
+# CLEAN DATABASE RESET & FRESH ATTACK SIMULATION
+## Verify Multi-Agent AI SOC Dashboard Counts and Correlation Accuracy
+
+Act as a Senior SOC Engineer, Database Engineer, and QA Automation Specialist.
+
+I want you to perform a complete fresh-start test of my existing Multi-Agent AI SOC project.
+
+My current dashboard displays:
+
+- Telemetry Events: 76
+- Agent Findings: 1573
+- Correlated Incidents: 9
+- Directly Implemented: 0
+- Manual Approvals: 23
+- Agent Findings pipeline count: 1573
+- Correlation Agent count: 14
+- LLM Threat Findings: 9
+- Containment: 23
+
+I suspect that old testing records, duplicate findings, previous attack simulations, or incorrect dashboard queries may be affecting these numbers.
+
+My objective is to clear the test data safely, simulate a fresh attack from scratch, and verify whether every number displayed on the dashboard is accurate.
+
+## PHASE 1: DATABASE INSPECTION AND BACKUP
+
+Before deleting anything:
+
+1. Identify the actual database being used by the running application.
+2. Identify whether it is SQLite or another database.
+3. Identify all relevant tables, including:
+   - security_events
+   - agent_findings
+   - incidents
+   - incident_findings
+   - incident_events
+   - response_actions
+   - threat intelligence records
+   - audit logs
+   - approval records
+   - other related tables discovered in the project.
+4. Inspect foreign-key relationships and cascading deletion rules.
+5. Record the current row count of every relevant table.
+6. Identify the database currently used by the running backend.
+7. Create a complete backup before making changes.
+
+IMPORTANT:
+- Do not delete the original production or development database.
+- Do not delete user accounts, roles, configuration, ML models, datasets, or application settings.
+- Do not delete the database file blindly.
+- Do not truncate tables without understanding their dependencies.
+- Prefer a separate isolated test database for this experiment.
+- If a safe isolated database cannot be created, stop and explain the issue rather than deleting existing data.
+
+## PHASE 2: CLEAN TEST ENVIRONMENT
+
+Prepare a clean database for the fresh attack simulation.
+
+Clear only historical test records from the isolated database.
+
+Ensure:
+- No old telemetry events remain.
+- No old agent findings remain.
+- No old correlated incidents remain.
+- No old incident-finding relationships remain.
+- No old response actions or pending approvals remain.
+- No stale dashboard statistics remain.
+
+Preserve required application configuration and initial administrator access.
+
+After cleaning, verify that all relevant record counts are zero.
+
+Restart the backend if necessary and confirm that it is connected to the clean test database.
+
+## PHASE 3: VERIFY DASHBOARD INITIAL STATE
+
+Open or query the dashboard APIs.
+
+Expected initial state:
+
+| Metric | Expected value |
+|---|---:|
+| Telemetry Events | 0 |
+| Agent Findings | 0 |
+| Correlated Incidents | 0 |
+| Pending Manual Approvals | 0 |
+| Containment Actions | 0 |
+| LLM Threat Findings | 0 |
+
+If any metric is nonzero, investigate its API query, database source, cached state, or frontend calculation.
+
+Do not simply force the displayed values to zero.
+
+## PHASE 4: EXECUTE A FRESH ATTACK SIMULATION
+
+Use the real event ingestion API and normal asynchronous event-processing pipeline.
+
+Do not insert findings or incidents directly into the database.
+
+Do not call agent methods directly as a substitute for end-to-end testing.
+
+Inspect the existing event schema and use valid payloads.
+
+Use a consistent synthetic test environment with these entities:
+
+- Attacker IP: 198.51.100.77
+- Victim host: DC-PRIMARY
+- Victim username: victim_admin
+- Internal network: 192.168.1.0/24
+
+These are synthetic test values. Do not attack real systems.
+
+Execute the following sequence:
+
+### Attack 1: Brute-Force Attempt
+
+Submit three failed authentication events for the same username and source IP within the configured 300-second authentication detection window.
+
+Expected:
+- Three telemetry events.
+- Authentication Agent detects brute-force behaviour.
+- One aggregated brute-force finding.
+- No premature correlated incident from this finding alone.
+
+### Attack 2: Suspicious Endpoint Activity
+
+Submit a safe synthetic endpoint event representing suspicious encoded PowerShell execution or another supported endpoint detection rule.
+
+Expected:
+- Endpoint EDR Agent processes the event.
+- A separate endpoint finding is persisted.
+- Source event and host attribution are correct.
+
+Do not execute the suspicious command on the actual machine.
+
+### Attack 3: Network Suspicious Activity
+
+Submit supported synthetic network telemetry representing a suspicious port scan or connection pattern.
+
+Expected:
+- Network Monitoring Agent processes the event.
+- A network finding is generated if detection conditions are met.
+
+### Attack 4: Multi-Stage Behaviour
+
+Submit supported synthetic telemetry representing suspicious privilege escalation or another implemented attack progression.
+
+Expected:
+- Relevant detection agent processes the event.
+- Evidence is correctly associated with the same synthetic victim environment.
+
+### Attack 5: Cross-Agent Correlation
+
+Allow the Correlation Agent to process the persisted findings.
+
+Expected:
+- At least two genuinely independent findings.
+- At least two distinct source events.
+- At least two distinct specialized detection agents.
+- A valid shared host, user, IP, or other supported entity.
+- Events within the configured 900-second correlation window.
+
+Expected result: one valid correlated incident for this attack chain, not an incident for every individual event or finding.
+
+Do not assume every attack stage must create a finding. Report what the actual detection logic produces.
+
+## PHASE 5: VERIFY THE COMPLETE INCIDENT PIPELINE
+
+For the newly created incident, verify:
+
+1. Correct incident ID.
+2. Correct linked findings.
+3. Correct source event IDs.
+4. Correct affected host and user.
+5. Correct event timeline.
+6. Attack-path graph.
+7. Investigation Agent output.
+8. Eight canonical investigation questions.
+9. Risk score and severity.
+10. Defensive Response Agent recommendations.
+11. Manual approval requirements.
+12. Dry-run response execution.
+13. Response verification record.
+
+Do not execute real firewall, identity-management, or host-isolation actions.
+
+Clearly distinguish simulated containment from real containment.
+
+## PHASE 6: VERIFY DASHBOARD COUNTS AGAINST DATABASE
+
+This is the most important part.
+
+After the fresh attack completes, obtain:
+
+- Actual event table row count.
+- Actual agent finding table row count.
+- Actual incident table row count.
+- Actual incident-finding relationship count.
+- Actual pending approval count.
+- Actual executed/simulated response count.
+- Actual containment status count.
+- Actual LLM-related finding count, if separately stored.
+
+Compare each value against the dashboard API response and the visible frontend metric.
+
+Investigate why the dashboard currently shows:
+- 1573 findings from 76 events.
+- 14 correlation agent records versus 9 correlated incidents.
+- 23 manual approvals.
+- 0 directly implemented actions.
+
+Determine whether these differences are valid differences in metric definitions or incorrect calculations.
+
+Do not make unrelated metrics artificially equal.
+
+For every dashboard card, document:
+- Metric name.
+- Exact definition.
+- Database table and query.
+- Whether it counts total, unique, active, pending, or historical records.
+- Actual database value.
+- API response value.
+- Frontend displayed value.
+
+Fix incorrect queries, duplicate aggregation, stale caching, or frontend calculation bugs if identified.
+
+## PHASE 7: DUPLICATE AND REPLAY TEST
+
+Replay one already-ingested event.
+
+Expected:
+- Duplicate event is detected.
+- No duplicate event record.
+- No duplicate finding or incident.
+- Dashboard counts remain accurate.
+
+Run correlation again and confirm idempotency.
+
+## PHASE 8: FINAL DELIVERABLE
+
+Create `FRESH_ATTACK_SIMULATION_REPORT.md` containing:
+
+1. Original database backup details.
+2. Isolated test database details.
+3. Initial clean database counts.
+4. Attack events submitted.
+5. Event IDs.
+6. Agent finding IDs.
+7. Correlated incident ID.
+8. Agent execution evidence.
+9. Investigation and attack-path results.
+10. SOAR and approval results.
+11. Database-versus-dashboard count comparison.
+12. Defects discovered.
+13. Fixes applied.
+14. Final test results.
+15. Exact commands to reproduce the fresh test.
+
+Provide screenshots of the dashboard:
+- Before the test, if available.
+- Immediately after database cleanup.
+- After brute-force detection.
+- After cross-agent incident creation.
+- After the complete incident-response workflow.
+
+## STRICT FINAL RULES
+
+- Do not delete the original database.
+- Do not invent successful detection.
+- Do not create findings or incidents directly in the database.
+- Do not bypass normal event processing.
+- Do not execute destructive attack commands.
+- Do not claim real containment when only dry-run simulation occurred.
+- Do not modify dashboard counts just to make them look correct.
+- Fix the underlying data/query issue if the displayed numbers are wrong.
+- Execute the test from a clean database and provide actual evidence.
+
+FINAL OBJECTIVE:
+
+I want to see the SOC dashboard start with zero test records, then watch a fresh synthetic attack progress through event ingestion, agent detection, correlation, incident investigation, risk assessment, and simulated response.
+
+At the end, every dashboard count must accurately reflect the actual database records and the meaning of its metric.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-11-14T17:07:57+05:30.
+</ADDITIONAL_METADATA>

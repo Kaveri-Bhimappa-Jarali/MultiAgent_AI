@@ -24,6 +24,10 @@ class MaliciousBehaviourAgent(BaseAgent):
         has_proc = "process_execution" in event_types
         has_net = "network_connection" in event_types
 
+        event_ids = [e.event_id for e in events]
+        primary_host = next((h for h in hosts if h), None)
+        primary_user = next((u for u in users if u), None)
+
         if has_auth and has_priv and has_file:
             self.record_finding(
                 title="Multi-Stage Attack Chain: Compromise → Escalation → Data Staging",
@@ -34,13 +38,17 @@ class MaliciousBehaviourAgent(BaseAgent):
                     "stages_detected": ["Authentication", "Privilege Escalation", "File Access"],
                     "associated_hosts": list(hosts),
                     "associated_users": list(users),
-                    "total_chain_events": len(events)
+                    "host": primary_host,
+                    "username": primary_user,
+                    "total_chain_events": len(events),
+                    "event_ids": event_ids
                 },
                 recommendations=[
                     "Trigger automated Incident Escalation protocol",
                     "Execute host isolation on all involved endpoints simultaneously",
                     "Initiate emergency credential revocation for involved user identities"
-                ]
+                ],
+                source_event_ids=event_ids
             )
             composite_findings.append("Full Intrusion Kill-Chain identified")
 
@@ -52,12 +60,16 @@ class MaliciousBehaviourAgent(BaseAgent):
                 description="Network activity correlated immediately with script/binary execution on target host, suggesting remote command delivery or dropper invocation.",
                 evidence={
                     "event_types": list(event_types),
-                    "target_hosts": list(hosts)
+                    "target_hosts": list(hosts),
+                    "host": primary_host,
+                    "username": primary_user,
+                    "event_ids": event_ids
                 },
                 recommendations=[
                     "Inspect firewall inbound flow logs",
                     "Audit EDR parent-child process relationship"
-                ]
+                ],
+                source_event_ids=event_ids
             )
             composite_findings.append("Network-to-Execution pivot observed")
 

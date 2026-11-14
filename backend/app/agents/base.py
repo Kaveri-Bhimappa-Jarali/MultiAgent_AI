@@ -93,9 +93,22 @@ class BaseAgent:
         confidence: float,
         description: str,
         evidence: Dict[str, Any],
-        recommendations: List[str]
+        recommendations: List[str],
+        source_event_ids: Optional[List[str]] = None
     ) -> AgentFinding:
         fid = f"AFIND-{uuid.uuid4().hex[:8].upper()}"
+        event_ids = list(source_event_ids or [])
+        if not event_ids and isinstance(evidence, dict):
+            if "event_ids" in evidence and isinstance(evidence["event_ids"], list):
+                event_ids.extend([str(eid) for eid in evidence["event_ids"]])
+            elif "event_id" in evidence and evidence["event_id"]:
+                event_ids.append(str(evidence["event_id"]))
+
+        # Normalize and deduplicate event references
+        normalized_event_ids = sorted(list({str(eid).strip() for eid in event_ids if eid and str(eid).strip()}))
+        if isinstance(evidence, dict) and "event_ids" in evidence:
+            evidence["event_ids"] = normalized_event_ids
+
         finding = AgentFinding(
             finding_id=fid,
             run_id=self.run_id,
@@ -105,6 +118,7 @@ class BaseAgent:
             confidence=confidence,
             description=description,
             evidence=evidence,
+            source_event_ids=normalized_event_ids,
             recommendations=recommendations,
             created_at=datetime.now(timezone.utc)
         )

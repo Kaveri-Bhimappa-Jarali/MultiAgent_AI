@@ -82,14 +82,6 @@ export const Detections: React.FC = () => {
         badge="MITRE ATT&CK Aligned"
         badgeVariant="royal"
         description="Review security flags and anomalies detected by signature rules and Machine Learning models. Enable or disable rules and evaluate backlogged events."
-        workflowStep={{
-          stepNumber: 3,
-          totalSteps: 6,
-          stepName: 'Review Detected Threats',
-          nextRoute: '/incidents',
-          nextLabel: 'Investigate Incidents (Step 4)'
-        }}
-        terms={['Detection', 'MITRE ATT&CK', 'Severity']}
         actions={
           <button
             onClick={handleRunEvaluation}

@@ -282,7 +282,6 @@ export const DemoLab: React.FC = () => {
         badge="Continuous Testbed"
         badgeVariant="gold"
         description="Launch simulated attack scenarios to observe live hands-free detection, multi-agent reasoning, and automated SOAR containment verification."
-        terms={['MITRE ATT&CK', 'AI Agent', 'SOAR']}
         actions={
           <button
             onClick={() => setResetModalOpen(true)}

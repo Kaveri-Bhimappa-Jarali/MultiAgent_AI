@@ -20,7 +20,7 @@ class AnomalyDetectionAgent(BaseAgent):
             if score > max_anomaly_score:
                 max_anomaly_score = score
                 
-            if is_anomaly or score >= 65.0:
+            if (is_anomaly and score >= 65.0) or score >= 68.0:
                 anomalies_detected.append({
                     "event_id": evt.event_id,
                     "score": score,
@@ -36,19 +36,23 @@ class AnomalyDetectionAgent(BaseAgent):
             self.record_finding(
                 title=f"Statistical Behavioral Outlier Detected (Score: {top_anomaly['score']}/100)",
                 severity="HIGH" if top_anomaly["score"] > 80 else "MEDIUM",
-                confidence=round(min(0.95, top_anomaly["score"] / 100), 2),
-                description=f"Isolation Forest identified significant multivariate statistical divergence in event {top_anomaly['event_id']} on host {top_anomaly['host']}.",
+                confidence=0.85,
+                description=f"Isolation Forest identified significant multivariate statistical divergence (Score: {top_anomaly['score']}/100) in event {top_anomaly['event_id']} on host {top_anomaly['host'] or 'unspecified host'}.",
                 evidence={
                     "anomaly_score": top_anomaly["score"],
                     "model_version": anomaly_engine.model_version,
                     "indicators": top_anomaly["indicators"],
+                    "host": top_anomaly["host"],
+                    "username": top_anomaly["user"],
                     "total_anomalous_events": len(anomalies_detected),
-                    "top_anomalous_event_id": top_anomaly["event_id"]
+                    "top_anomalous_event_id": top_anomaly["event_id"],
+                    "event_ids": [top_anomaly["event_id"]]
                 },
                 recommendations=[
                     "Cross-reference user normal baseline activity profile",
                     "Monitor subsequent flows for lateral movement attempts"
-                ]
+                ],
+                source_event_ids=[top_anomaly["event_id"]]
             )
 
         return {

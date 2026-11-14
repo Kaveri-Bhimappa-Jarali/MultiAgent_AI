@@ -54,7 +54,6 @@ export const ThreatIntel: React.FC = () => {
         badge="Indicator Enrichment"
         badgeVariant="royal"
         description="Query IP addresses, domains and hashes against curated threat actor indicators, botnets and command-and-control infrastructure."
-        terms={['MITRE ATT&CK', 'Detection']}
       />
 
       {/* Indicator Lookup Search */}
