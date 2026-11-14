@@ -1,0 +1,183 @@
+{
+  "agent_executions": {
+    "count": 1050,
+    "foreign_keys": []
+  },
+  "agent_findings": {
+    "count": 1573,
+    "foreign_keys": []
+  },
+  "attack_simulations": {
+    "count": 0,
+    "foreign_keys": []
+  },
+  "audit_logs": {
+    "count": 19,
+    "foreign_keys": []
+  },
+  "collector_configs": {
+    "count": 0,
+    "foreign_keys": []
+  },
+  "detection_findings": {
+    "count": 150,
+    "foreign_keys": []
+  },
+  "detection_rules": {
+    "count": 10,
+    "foreign_keys": []
+  },
+  "evaluation_runs": {
+    "count": 1,
+    "foreign_keys": []
+  },
+  "incident_audits": {
+    "count": 11,
+    "foreign_keys": [
+      {
+        "id": 0,
+        "seq": 0,
+        "table": "incidents",
+        "from": "incident_id",
+        "to": "incident_id",
+        "on_update": "NO ACTION",
+        "on_delete": "CASCADE"
+      }
+    ]
+  },
+  "incident_events": {
+    "count": 105,
+    "foreign_keys": [
+      {
+        "id": 0,
+        "seq": 0,
+        "table": "security_events",
+        "from": "event_id",
+        "to": "event_id",
+        "on_update": "NO ACTION",
+        "on_delete": "CASCADE"
+      },
+      {
+        "id": 1,
+        "seq": 0,
+        "table": "incidents",
+        "from": "incident_id",
+        "to": "incident_id",
+        "on_update": "NO ACTION",
+        "on_delete": "CASCADE"
+      }
+    ]
+  },
+  "incident_findings": {
+    "count": 8,
+    "foreign_keys": [
+      {
+        "id": 0,
+        "seq": 0,
+        "table": "agent_findings",
+        "from": "finding_id",
+        "to": "finding_id",
+        "on_update": "NO ACTION",
+        "on_delete": "CASCADE"
+      },
+      {
+        "id": 1,
+        "seq": 0,
+        "table": "incidents",
+        "from": "incident_id",
+        "to": "incident_id",
+        "on_update": "NO ACTION",
+        "on_delete": "CASCADE"
+      }
+    ]
+  },
+  "incident_notes": {
+    "count": 0,
+    "foreign_keys": [
+      {
+        "id": 0,
+        "seq": 0,
+        "table": "incidents",
+        "from": "incident_id",
+        "to": "incident_id",
+        "on_update": "NO ACTION",
+        "on_delete": "CASCADE"
+      }
+    ]
+  },
+  "incidents": {
+    "count": 9,
+    "foreign_keys": []
+  },
+  "response_actions": {
+    "count": 23,
+    "foreign_keys": [
+      {
+        "id": 0,
+        "seq": 0,
+        "table": "incidents",
+        "from": "incident_id",
+        "to": "incident_id",
+        "on_update": "NO ACTION",
+        "on_delete": "CASCADE"
+      }
+    ]
+  },
+  "risk_assessments": {
+    "count": 9,
+    "foreign_keys": [
+      {
+        "id": 0,
+        "seq": 0,
+        "table": "incidents",
+        "from": "incident_id",
+        "to": "incident_id",
+        "on_update": "NO ACTION",
+        "on_delete": "CASCADE"
+      }
+    ]
+  },
+  "security_events": {
+    "count": 76,
+    "foreign_keys": []
+  },
+  "threat_indicators": {
+    "count": 5,
+    "foreign_keys": []
+  },
+  "users": {
+    "count": 2,
+    "foreign_keys": []
+  },
+  "verification_results": {
+    "count": 1,
+    "foreign_keys": [
+      {
+        "id": 0,
+        "seq": 0,
+        "table": "incidents",
+        "from": "incident_id",
+        "to": "incident_id",
+        "on_update": "NO ACTION",
+        "on_delete": "CASCADE"
+      },
+      {
+        "id": 1,
+        "seq": 0,
+        "table": "response_actions",
+        "from": "action_id",
+        "to": "action_id",
+        "on_update": "NO ACTION",
+        "on_delete": "CASCADE"
+      }
+    ]
+  },
+  "vm_actions": {
+    "count": 0,
+    "foreign_keys": []
+  },
+  "vm_nodes": {
+    "count": 3,
+    "foreign_keys": []
+  }
+}

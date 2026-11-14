@@ -3,6 +3,8 @@ import { api } from '../api/client'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
+import { useVMNodes, isVMConnected } from '../hooks/useVMNodes'
+import { formatSocTimestamp } from '../utils/timestamps'
 import {
   Crosshair,
   Play,
@@ -13,7 +15,11 @@ import {
   Layers,
   AlertOctagon,
   CheckCircle2,
-  Clock
+  Clock,
+  Network,
+  Server,
+  ShieldCheck,
+  Cpu
 } from 'lucide-react'
 
 export function AttackSimulation() {
@@ -24,6 +30,8 @@ export function AttackSimulation() {
   const [launchingScenario, setLaunchingScenario] = useState(null)
   const [targetIp, setTargetIp] = useState('')
   const [isLaunching, setIsLaunching] = useState(false)
+
+  const { nodes, error: vmError, loading: vmLoading, refresh: refreshVMNodes, connectedCount } = useVMNodes()
 
   const [parameters, setParameters] = useState({})
   const [error, setError] = useState('')
@@ -58,7 +66,8 @@ export function AttackSimulation() {
     finally { setLoading(false) }
     refreshHistory()
     verifyInfrastructure()
-  }, [refreshHistory, verifyInfrastructure])
+    refreshVMNodes()
+  }, [refreshHistory, verifyInfrastructure, refreshVMNodes])
 
   useEffect(() => {
     fetchData()
@@ -104,76 +113,182 @@ export function AttackSimulation() {
           <div className="flex items-center gap-2.5">
             <h1 className="text-2xl font-black tracking-tight text-white flex items-center gap-2">
               <Crosshair className="w-6 h-6 text-rose-400" />
-              <span>Adversary Attack Simulation Console</span>
+              <span>Virtual Lab & Adversary Attack Simulation</span>
             </h1>
             <span className="px-2.5 py-0.5 rounded-full bg-rose-950/60 border border-rose-500/40 text-rose-300 font-mono text-xs font-bold">
               Breach & Attack Simulation (BAS)
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-1 font-medium">
-            Execute controlled adversary emulation campaigns against virtual nodes to test multi-agent detection and SOAR containment
+            Unified console for connected virtual nodes, live telemetry collectors, and controlled adversary emulation campaigns.
           </p>
         </div>
 
-        <Button variant="secondary" onClick={fetchData} disabled={loading}>
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-          <span>Refresh</span>
+        <Button variant="secondary" onClick={fetchData} disabled={loading || vmLoading}>
+          <RefreshCw className={`w-3.5 h-3.5 ${loading || vmLoading ? 'animate-spin' : ''}`} />
+          <span>Refresh All</span>
         </Button>
       </div>
 
-      {error && <p role="alert" className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-3 text-xs text-amber-200">{error}</p>}
-      <section aria-label="Live simulation infrastructure" className="rounded-xl border border-cyan-500/20 bg-[#0d121c] p-4 text-xs space-y-2">
-        <p className="font-semibold text-white">{checking ? 'Checking VM connections…' : status?.all_ready ? 'Both VMs connected · private route ready' : 'Infrastructure not ready; check VM connections'}</p>
-        {status && <div className="flex flex-wrap gap-4 font-mono text-slate-300"><span>Attacker: {status.attacker_vm?.host} / {status.attacker_vm?.private_ip}</span><span>Victim: {status.victim_vm?.host} / {status.victim_vm?.private_ip}</span></div>}
-      </section>
-      {loading && <p role="status" className="text-xs text-slate-400">Loading supported scenarios…</p>}
-      {/* Scenario Catalog */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {scenarios.map((scen) => (
-          <div
-            key={scen.scenario_id}
-            className="p-5 rounded-2xl bg-[#0d121c] border border-[#1e2736] hover:border-purple-500/40 transition-all flex flex-col justify-between"
-          >
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-mono text-purple-400 text-xs font-bold">{scen.scenario_id}</span>
-                <Badge type={scen.severity || 'HIGH'}>{scen.severity || 'HIGH'}</Badge>
-              </div>
+      {(error || vmError) && (
+        <p role="alert" className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-3 text-xs text-amber-200">
+          {error || vmError}
+        </p>
+      )}
 
-              <h3 className="font-bold text-white text-sm">{scen.name}</h3>
-              <p className="text-xs text-slate-400 mt-1 line-clamp-2">{scen.description}</p>
-
-              <div className="mt-3 p-2.5 rounded-xl bg-[#090d16] border border-[#182130] font-mono text-[11px] space-y-1">
-                <div className="flex justify-between text-slate-400">
-                  <span>MITRE TTP:</span>
-                  <span className="text-cyan-400">{scen.mitre_technique}</span>
-                </div>
-                <div className="flex justify-between text-slate-400">
-                  <span>Target Node:</span>
-                  <span className="text-white">{status?.victim_vm?.private_ip || 'Checking…'}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-4 pt-3 border-t border-[#182130] flex justify-end">
-              <Button
-                variant="primary"
-                size="xs"
-                disabled={!status?.all_ready || running}
-                onClick={() => {
-                  setLaunchingScenario(scen)
-                  setTargetIp(status?.victim_vm?.private_ip || status?.allowed_targets?.[0] || '')
-                  setParameters({ ...scen.default_parameters })
-                  setError('')
-                }}
-              >
-                <Play className="w-3.5 h-3.5 mr-1" />
-                <span>Launch Attack</span>
-              </Button>
-            </div>
+      {/* SECTION 1: Connected VM Lab Nodes */}
+      <section aria-label="Connected virtual machines" className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#182130] pb-3">
+          <div className="flex items-center gap-2">
+            <Network className="w-5 h-5 text-cyan-400" />
+            <h2 className="text-sm font-bold text-white uppercase tracking-wider">Connected VM Lab Infrastructure</h2>
           </div>
-        ))}
-      </div>
+          <div className="flex items-center gap-3 text-xs">
+            <span className="text-slate-400">VMs Reporting:</span>
+            <span className="font-mono font-bold text-emerald-400 px-2 py-0.5 rounded bg-emerald-950/50 border border-emerald-500/30">
+              {connectedCount} / {nodes.length || 2} Active
+            </span>
+            <span className={`px-2 py-0.5 rounded text-[11px] font-mono font-semibold border ${
+              status?.all_ready
+                ? 'bg-cyan-950/50 border-cyan-500/40 text-cyan-300'
+                : 'bg-amber-950/50 border-amber-500/40 text-amber-300'
+            }`}>
+              {checking ? 'Probing Route…' : status?.all_ready ? `Private Route Ready (${status.private_latency_ms ?? 1.5} ms)` : 'Route Not Ready'}
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          {nodes.map(node => (
+            <article key={node.vm_id} className="rounded-2xl border border-[#1e2736] bg-[#0d121c] p-5 space-y-4 hover:border-cyan-500/30 transition-all">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  {node.role === 'ATTACKER' ? (
+                    <Terminal className="w-4 h-4 text-amber-400" />
+                  ) : (
+                    <Server className="w-4 h-4 text-cyan-400" />
+                  )}
+                  <span>{node.role === 'ATTACKER' ? 'Attacker VM (Emulation Node)' : 'Victim VM · Nginx (Monitored Asset)'}</span>
+                </h3>
+                <Badge type={isVMConnected(node) ? 'secure' : 'pending'}>
+                  {node.status.replace(/_/g, ' ')}
+                </Badge>
+              </div>
+
+              <dl className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                <div>
+                  <dt className="text-slate-500 text-[11px]">Node Identity</dt>
+                  <dd className="text-slate-200 font-mono font-semibold">{node.vm_id}</dd>
+                </div>
+                <div>
+                  <dt className="text-slate-500 text-[11px]">Private IP</dt>
+                  <dd className="text-cyan-300 font-mono font-bold">{node.ip_address}</dd>
+                </div>
+                <div>
+                  <dt className="text-slate-500 text-[11px]">Operating System</dt>
+                  <dd className="text-slate-300 font-mono truncate">{node.os_info}</dd>
+                </div>
+                <div>
+                  <dt className="text-slate-500 text-[11px]">Last Heartbeat</dt>
+                  <dd className="text-slate-300 font-mono text-[11px]">{formatSocTimestamp(node.last_heartbeat_at)}</dd>
+                </div>
+                <div>
+                  <dt className="text-slate-500 text-[11px]">{node.role === 'ATTACKER' ? 'Simulation Tools' : 'Last Telemetry'}</dt>
+                  <dd className="text-slate-300 font-mono text-[11px]">
+                    {node.role === 'ATTACKER' ? (
+                      status?.tools_installed ? (
+                        <span className="text-emerald-400 font-bold">nmap · curl · py3 · nc</span>
+                      ) : 'nmap, curl, py3'
+                    ) : (
+                      formatSocTimestamp(node.last_telemetry_at)
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-slate-500 text-[11px]">Events Received</dt>
+                  <dd className="text-emerald-400 font-mono font-bold">{(node.events_count ?? 0).toLocaleString()}</dd>
+                </div>
+              </dl>
+
+              <div>
+                <dt className="text-[10px] uppercase font-bold text-slate-500 mb-1.5 tracking-wider">Active Guest Telemetry Collectors</dt>
+                <div className="flex flex-wrap gap-1.5">
+                  {(node.active_collectors || []).map(collector => (
+                    <span key={collector} className="rounded-md border border-cyan-500/20 bg-cyan-950/30 px-2 py-0.5 text-[10px] text-cyan-300 font-mono">
+                      {collector}
+                    </span>
+                  ))}
+                  {(!node.active_collectors || node.active_collectors.length === 0) && (
+                    <span className="text-[10px] text-slate-500 font-mono">No active collectors</span>
+                  )}
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      {/* SECTION 2: Adversary Attack Scenarios */}
+      <section aria-label="Adversary attack scenarios" className="space-y-4 pt-2">
+        <div className="flex items-center justify-between border-b border-[#182130] pb-3">
+          <div className="flex items-center gap-2">
+            <Crosshair className="w-5 h-5 text-rose-400" />
+            <h2 className="text-sm font-bold text-white uppercase tracking-wider">Adversary Emulation Scenarios</h2>
+          </div>
+          <span className="text-xs font-mono text-slate-400">
+            Targeting Victim Private IP: <strong className="text-white">{status?.victim_vm?.private_ip || '10.0.0.14'}</strong>
+          </span>
+        </div>
+
+        {loading && <p role="status" className="text-xs text-slate-400">Loading supported scenarios…</p>}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {scenarios.map((scen) => (
+            <div
+              key={scen.scenario_id}
+              className="p-5 rounded-2xl bg-[#0d121c] border border-[#1e2736] hover:border-purple-500/40 transition-all flex flex-col justify-between"
+            >
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-mono text-purple-400 text-xs font-bold">{scen.scenario_id}</span>
+                  <Badge type={scen.severity || 'HIGH'}>{scen.severity || 'HIGH'}</Badge>
+                </div>
+
+                <h3 className="font-bold text-white text-sm">{scen.name}</h3>
+                <p className="text-xs text-slate-400 mt-1 line-clamp-2">{scen.description}</p>
+
+                <div className="mt-3 p-2.5 rounded-xl bg-[#090d16] border border-[#182130] font-mono text-[11px] space-y-1">
+                  <div className="flex justify-between text-slate-400">
+                    <span>MITRE TTP:</span>
+                    <span className="text-cyan-400">{scen.mitre_technique}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-400">
+                    <span>Target Node:</span>
+                    <span className="text-white">{status?.victim_vm?.private_ip || '10.0.0.14'}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-[#182130] flex justify-end">
+                <Button
+                  variant="primary"
+                  size="xs"
+                  disabled={!status?.all_ready || running}
+                  onClick={() => {
+                    setLaunchingScenario(scen)
+                    setTargetIp(status?.victim_vm?.private_ip || status?.allowed_targets?.[0] || '10.0.0.14')
+                    setParameters({ ...scen.default_parameters })
+                    setError('')
+                  }}
+                >
+                  <Play className="w-3.5 h-3.5 mr-1" />
+                  <span>Launch Attack</span>
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
 
       {/* Historical Simulation Executions */}
       <div className="rounded-2xl p-5 bg-[#0d121c] border border-[#1e2736] shadow-xl">

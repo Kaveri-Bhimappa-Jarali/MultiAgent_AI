@@ -310,6 +310,11 @@ class VMGuestCollector:
         sanitized_line = re.sub(r"(password[=:\s]+)\S+", r"\1[REDACTED]", line, flags=re.IGNORECASE)
         now = datetime.now(timezone.utc).isoformat()
 
+        # Extract candidate remote IP from line
+        all_ips = re.findall(r"\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b", line)
+        remote_ips = [ip for ip in all_ips if ip != self.local_ip and not ip.startswith("127.")]
+        default_remote_ip = remote_ips[0] if remote_ips else "10.0.0.13"
+
         # Failed SSH Login / Invalid User Attempts
         if "failed password" in line.lower() or "authentication failure" in line.lower() or "invalid user" in line.lower():
             if "connection closed by invalid user" in line.lower():
@@ -320,7 +325,7 @@ class VMGuestCollector:
             return {
                 "event_type": "authentication",
                 "severity": "HIGH",
-                "source_ip": ip_m.group(1) if ip_m else "10.0.0.15",
+                "source_ip": default_remote_ip if not ip_m else ip_m.group(1),
                 "destination_ip": self.local_ip,
                 "destination_port": 22,
                 "source_port": int(port_m.group(1)) if port_m else 49152,
@@ -340,7 +345,7 @@ class VMGuestCollector:
             return {
                 "event_type": "authentication",
                 "severity": "INFO",
-                "source_ip": ip_m.group(1) if ip_m else "10.0.0.15",
+                "source_ip": default_remote_ip if not ip_m else ip_m.group(1),
                 "destination_ip": self.local_ip,
                 "destination_port": 22,
                 "username": user_m.group(1) if user_m else "ubuntu",
@@ -457,7 +462,14 @@ class VMGuestCollector:
             return None
         source = socket.inet_ntoa(frame[26:30])
         destination = socket.inet_ntoa(frame[30:34])
-        if source != os.environ.get('SOC_NETWORK_PEER_IP') or destination != self.local_ip:
+        if source == self.local_ip or destination != self.local_ip:
+            return None
+        peer_ip = os.environ.get('SOC_NETWORK_PEER_IP')
+        # If peer_ip is specified and distinct from local_ip, require match
+        if peer_ip and peer_ip != self.local_ip:
+            if source != peer_ip:
+                return None
+        elif not source.startswith("10.0."):
             return None
         # Ignore noninitial IPv4 fragments, which do not carry transport ports.
         if struct.unpack('!H', frame[20:22])[0] & 0x1fff:

@@ -64,38 +64,76 @@ class MultiAgentSOCEngine:
         shared_context = {
             "batch_id": batch_id,
             "incident_id": incident_id,
-            "events": events,
-            "summary": f"Pipeline execution over {len(events)} events (Incident: {incident_id or 'General'})"
+            "events": events or [],
+            "summary": f"Pipeline execution over {len(events or [])} events (Incident: {incident_id or 'General'})"
         }
 
         agent_results = []
-        agents_to_run = []
 
         if agent_filter and agent_filter in AGENT_REGISTRY:
-            agents_to_run = [AGENT_REGISTRY[agent_filter]]
+            AgentClass = AGENT_REGISTRY[agent_filter]
+            agent_instance = AgentClass(self.db)
+            res = agent_instance.execute(shared_context)
+            agent_results.append(res)
+        elif incident_id:
+            # Investigating an established incident
+            downstream_agents = [
+                AttackPathAgent,
+                InvestigationAgent,
+                ResponseAgent
+            ]
+            for AgentClass in downstream_agents:
+                agent_instance = AgentClass(self.db)
+                res = agent_instance.execute(shared_context)
+                agent_results.append(res)
+
+            inc = self.db.query(Incident).filter(Incident.incident_id == incident_id).first()
+            if inc:
+                from app.services.risk_service import calculate_incident_risk
+                calculate_incident_risk(self.db, inc)
         else:
-            # Full canonical sequence
-            agents_to_run = [
+            # Full canonical sequence: Specialized detection agents first
+            detection_agents = [
                 NetworkMonitoringAgent,
                 AuthenticationAgent,
                 EndpointAgent,
                 MaliciousBehaviourAgent,
                 AnomalyDetectionAgent,
-                ThreatIntelligenceAgent,
-                CorrelationAgent,
-                AttackPathAgent,
-                InvestigationAgent,
-                ResponseAgent
+                ThreatIntelligenceAgent
             ]
+            for AgentClass in detection_agents:
+                agent_instance = AgentClass(self.db)
+                res = agent_instance.execute(shared_context)
+                agent_results.append(res)
 
-        for AgentClass in agents_to_run:
-            agent_instance = AgentClass(self.db)
-            res = agent_instance.execute(shared_context)
-            agent_results.append(res)
+            # Correlation Agent evaluates persisted findings
+            corr_agent = CorrelationAgent(self.db)
+            corr_res = corr_agent.execute(shared_context)
+            agent_results.append(corr_res)
+
+            # Downstream execution only for established / updated incidents
+            incident_ids = corr_res.get("data", {}).get("incident_ids", [])
+            for inc_id in incident_ids:
+                inc_context = dict(shared_context)
+                inc_context["incident_id"] = inc_id
+
+                path_agent = AttackPathAgent(self.db)
+                agent_results.append(path_agent.execute(inc_context))
+
+                inv_agent = InvestigationAgent(self.db)
+                agent_results.append(inv_agent.execute(inc_context))
+
+                resp_agent = ResponseAgent(self.db)
+                agent_results.append(resp_agent.execute(inc_context))
+
+                inc = self.db.query(Incident).filter(Incident.incident_id == inc_id).first()
+                if inc:
+                    from app.services.risk_service import calculate_incident_risk
+                    calculate_incident_risk(self.db, inc)
 
         return {
             "batch_id": batch_id,
-            "events_evaluated": len(events),
+            "events_evaluated": len(events or []),
             "agents_executed": len(agent_results),
             "pipeline_status": "COMPLETED",
             "results": agent_results
@@ -130,29 +168,24 @@ class MultiAgentSOCEngine:
             "summary": f"Selective real-time pipeline triggered by event {event.event_id} ({event.event_type})"
         }
 
-        # 1. Determine Domain Agent based on event type
+        # 1. Stage 1: Domain Telemetry Ingestion Agent based on event type
         domain_agents = []
         if event.event_type == "authentication":
             domain_agents.append(AuthenticationAgent)
-        elif event.event_type == "network_connection":
+        elif event.event_type in ["network_connection", "network_traffic", "network"]:
             domain_agents.append(NetworkMonitoringAgent)
+            # Web server connections / HTTP request bursts run on the endpoint host (T1499.002)
+            is_web_or_endpoint = (
+                event.destination_port in [80, 443, 8080]
+                or "nginx" in (event.command_line or "").lower()
+                or (event.file_action and any(w in event.file_action.upper() for w in ["WEB", "HTTP", "BURST"]))
+                or "http" in (event.command_line or "").lower()
+            )
+            if is_web_or_endpoint:
+                domain_agents.append(EndpointAgent)
         elif event.event_type in ["process_execution", "file_access", "privilege_escalation"]:
             domain_agents.append(EndpointAgent)
 
-        # 2. Anomaly agent if ML finding or notable score
-        if any(f.detection_method == "ANOMALY_DETECTION" for f in (findings or [])):
-            domain_agents.append(AnomalyDetectionAgent)
-
-        # 3. Threat Intel agent if external observable exists
-        if event.source_ip and not any(event.source_ip.startswith(p) for p in ["127.", "10.", "192.168."]):
-            domain_agents.append(ThreatIntelligenceAgent)
-
-        # 4. Malicious Behaviour agent if multi-stage or composite pattern observed
-        all_types = {e.event_type for e in (recent_events or [event])}
-        if len(all_types) >= 2 and any(t in all_types for t in ["privilege_escalation", "file_access", "process_execution"]):
-            domain_agents.append(MaliciousBehaviourAgent)
-
-        # Execute selected domain agents
         for AgentCls in domain_agents:
             agent = AgentCls(self.db)
             broadcaster.publish_sync("AGENT_STATUS_CHANGED", {
@@ -169,57 +202,145 @@ class MultiAgentSOCEngine:
                 "findings_count": len(res.get("findings", []))
             })
 
-        # 4. Correlation Agent if findings were produced or event is HIGH/CRITICAL
-        has_threat = (findings and len(findings) > 0) or event.severity in ["HIGH", "CRITICAL"]
-        if has_threat:
+        from app.models.agent import AgentFinding
+        from app.services.time_utils import utc_isoformat
+
+        # Collect any newly generated AgentFinding instances from Stage 1
+        new_agent_findings = []
+        for res in agent_results:
+            fids = res.get("findings", [])
+            if fids:
+                f_objs = self.db.query(AgentFinding).filter(AgentFinding.finding_id.in_(fids)).all()
+                new_agent_findings.extend(f_objs)
+
+        # 2. Stage 2: Intelligence & Advanced Anomaly Agents (Parallel)
+        # Execute if Stage 1 flagged an anomaly, rule findings exist, or event indicates threat
+        stage2_agents = []
+        has_anomalous_telemetry = (
+            bool(new_agent_findings)
+            or bool(findings)
+            or event.severity in ["MEDIUM", "HIGH", "CRITICAL"]
+        )
+
+        if has_anomalous_telemetry:
+            stage2_agents.append(AnomalyDetectionAgent)
+            stage2_agents.append(MaliciousBehaviourAgent)
+
+        # Threat Intel agent if external observable exists or high-severity indicators present
+        has_external_ip = (
+            (event.source_ip and not any(event.source_ip.startswith(p) for p in ["127.", "10.", "192.168.", "172.16."]))
+            or (event.destination_ip and not any(event.destination_ip.startswith(p) for p in ["127.", "10.", "192.168.", "172.16."]))
+        )
+        if has_external_ip or any(f.severity in ["HIGH", "CRITICAL"] for f in new_agent_findings):
+            stage2_agents.append(ThreatIntelligenceAgent)
+
+        for AgentCls in stage2_agents:
+            agent = AgentCls(self.db)
+            broadcaster.publish_sync("AGENT_STATUS_CHANGED", {
+                "name": agent.name,
+                "status": "RUNNING",
+                "event_id": event.event_id
+            })
+            res = agent.execute(shared_context)
+            agent_results.append(res)
+            broadcaster.publish_sync("AGENT_STATUS_CHANGED", {
+                "name": agent.name,
+                "status": res["status"],
+                "duration_ms": res.get("duration_ms", 0),
+                "findings_count": len(res.get("findings", []))
+            })
+            fids = res.get("findings", [])
+            if fids:
+                f_objs = self.db.query(AgentFinding).filter(AgentFinding.finding_id.in_(fids)).all()
+                new_agent_findings.extend(f_objs)
+
+        # Broadcast newly generated individual agent findings to UI
+        for af in new_agent_findings:
+            broadcaster.publish_sync("AGENT_FINDING_RECORDED", {
+                "id": af.id,
+                "finding_id": af.finding_id,
+                "agent_name": af.agent_name,
+                "title": af.title,
+                "severity": af.severity,
+                "confidence": af.confidence,
+                "description": af.description,
+                "incident_id": af.incident_id,
+                "created_at": utc_isoformat(af.created_at)
+            })
+
+        # 3. Stage 3: Correlation Agent evaluates related recent events (requires >= 2 distinct events)
+        context_events = shared_context.get("events", [])
+        distinct_event_ids = {e.event_id for e in context_events if e.event_id}
+        has_enough_events = len(distinct_event_ids) >= 2
+        has_threat = (
+            bool(findings)
+            or bool(new_agent_findings)
+            or event.severity in ["MEDIUM", "HIGH", "CRITICAL"]
+        )
+
+        if has_threat and has_enough_events:
             corr_agent = CorrelationAgent(self.db)
-            corr_res = corr_agent.execute(shared_context)
+            corr_context = dict(shared_context)
+            corr_context["window_seconds"] = 900
+            corr_res = corr_agent.execute(corr_context)
+            agent_results.append(corr_res)
             agent_results.append(corr_res)
 
-            incident_ids = corr_res.get("data", {}).get("incident_ids", [])
+            data = corr_res.get("data", {})
+            created_inc_ids = data.get("incidents_created", [])
+            if isinstance(created_inc_ids, int):
+                created_inc_ids = data.get("incident_ids", [])
+            updated_inc_ids = data.get("incidents_updated", [])
+            if isinstance(updated_inc_ids, int):
+                updated_inc_ids = []
+            incident_ids = data.get("incident_ids", []) or list(set(created_inc_ids + updated_inc_ids))
+
+            # Downstream execution strictly for genuinely established or updated incidents
             for inc_id in incident_ids:
-                # Run Attack Path, Investigation, Response for created/updated incident
-                shared_context["incident_id"] = inc_id
+                downstream_context = dict(shared_context)
+                downstream_context["incident_id"] = inc_id
 
                 path_agent = AttackPathAgent(self.db)
-                agent_results.append(path_agent.execute(shared_context))
+                agent_results.append(path_agent.execute(downstream_context))
 
                 inv_agent = InvestigationAgent(self.db)
-                agent_results.append(inv_agent.execute(shared_context))
+                agent_results.append(inv_agent.execute(downstream_context))
 
                 resp_agent = ResponseAgent(self.db)
-                agent_results.append(resp_agent.execute(shared_context))
+                agent_results.append(resp_agent.execute(downstream_context))
 
-                # Recalculate risk score
+                # Recalculate calibrated multi-factor risk score
                 inc = self.db.query(Incident).filter(Incident.incident_id == inc_id).first()
                 if inc:
                     from app.services.risk_service import calculate_incident_risk
                     calculate_incident_risk(self.db, inc)
 
-                    # Trigger LLM Threat Reasoning Layer
-                    from app.services.llm_service import analyze_threat_findings
+                    # Optional LLM Threat Reasoning Layer
                     try:
+                        from app.services.llm_service import analyze_threat_findings
                         llm_verdict = analyze_threat_findings(
                             self.db,
                             findings=findings or [],
                             event=event,
                             incident=inc
                         )
-                        inc.investigation_status = "LLM_ANALYZED"
                         if llm_verdict.get("response_status") == "AUTONOMOUSLY_CONTAINED":
                             inc.response_status = "AUTONOMOUSLY_CONTAINED"
                             inc.status = "CONTAINED"
                         self.db.commit()
                     except Exception as llm_err:
-                        print(f"[!] LLM analysis exception: {llm_err}")
+                        pass
 
-                    broadcaster.publish_sync("INCIDENT_UPDATED", {
+                    event_topic = "INCIDENT_CREATED" if inc_id in created_inc_ids else "INCIDENT_UPDATED"
+                    broadcaster.publish_sync(event_topic, {
                         "incident_id": inc.incident_id,
                         "title": inc.title,
                         "severity": inc.severity,
                         "risk_score": inc.risk_score,
                         "status": inc.status,
-                        "event_count": inc.event_count
+                        "event_count": inc.event_count,
+                        "finding_count": getattr(inc, "finding_count", 0),
+                        "participating_agents": getattr(inc, "participating_agents", [])
                     })
 
         return {

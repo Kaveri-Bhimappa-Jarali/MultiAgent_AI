@@ -136,20 +136,30 @@ def get_incident_detail(incident_id: str, db: Session = Depends(get_db)):
         } for a in audits
     ]
 
-    # Agent Findings mentioning this incident or its events
-    agent_findings = db.query(AgentFinding).order_by(AgentFinding.created_at.desc()).limit(15).all()
+    # Agent Findings linked to this incident via IncidentFinding or AgentFinding.incident_id
+    from app.models.incident import IncidentFinding
+    inc_finding_rels = db.query(IncidentFinding).filter(IncidentFinding.incident_id == incident_id).all()
+    inc_finding_ids = {r.finding_id for r in inc_finding_rels}
+
+    agent_findings = db.query(AgentFinding).filter(
+        (AgentFinding.incident_id == incident_id) |
+        (AgentFinding.finding_id.in_(inc_finding_ids))
+    ).order_by(AgentFinding.created_at.asc()).all()
+
     findings_list = [
         {
             "finding_id": f.finding_id,
             "agent_name": f.agent_name,
+            "incident_id": f.incident_id,
             "title": f.title,
             "severity": f.severity,
             "confidence": f.confidence,
             "description": f.description,
             "evidence": f.evidence,
+            "source_event_ids": f.source_event_ids or [],
             "recommendations": f.recommendations,
             "created_at": utc_isoformat(f.created_at)
-        } for f in agent_findings if incident_id in str(f.evidence) or any(eid in str(f.evidence) for eid in event_ids)
+        } for f in agent_findings
     ]
 
     detail = IncidentDetailResponse.model_validate(inc)

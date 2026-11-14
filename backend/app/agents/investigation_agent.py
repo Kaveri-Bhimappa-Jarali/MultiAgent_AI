@@ -23,10 +23,24 @@ class InvestigationAgent(BaseAgent):
             if rel:
                 target_inc = self.db.query(Incident).filter(Incident.incident_id == rel.incident_id).first()
 
+        if not target_inc:
+            self.log("INFO", "No established incident provided for investigation. Skipping.")
+            return {
+                "incident_id": None,
+                "investigation_status": "SKIPPED",
+                "ai_summary": None
+            }
+
+        # If incident exists, load all associated events
+        rel_events = self.db.query(IncidentEvent).filter(IncidentEvent.incident_id == target_inc.incident_id).order_by(IncidentEvent.sequence_order).all()
+        if rel_events:
+            event_ids = [r.event_id for r in rel_events]
+            events = self.db.query(SecurityEvent).filter(SecurityEvent.event_id.in_(event_ids)).all()
+
         # Extract entities
-        users = sorted(list({e.username for e in events if e.username}))
-        hosts = sorted(list({e.host for e in events if e.host}))
-        src_ips = sorted(list({e.source_ip for e in events if e.source_ip}))
+        users = sorted(list({e.username for e in events if e.username} | set(target_inc.affected_users or [])))
+        hosts = sorted(list({e.host for e in events if e.host} | set(target_inc.affected_hosts or [])))
+        src_ips = sorted(list({e.source_ip for e in events if e.source_ip} | set(target_inc.affected_ips or [])))
         dst_ips = sorted(list({e.destination_ip for e in events if e.destination_ip}))
         event_types = sorted(list({e.event_type for e in events}))
 
@@ -147,9 +161,11 @@ class InvestigationAgent(BaseAgent):
                 "incident_id": target_inc.incident_id if target_inc else None,
                 "correlated_events": len(events),
                 "mitre_techniques": techniques_observed,
-                "rca_summary": ai_summary
+                "rca_summary": ai_summary,
+                "event_ids": event_ids
             },
-            recommendations=remediation_recommended
+            recommendations=remediation_recommended,
+            source_event_ids=event_ids
         )
 
         return {

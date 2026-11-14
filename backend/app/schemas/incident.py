@@ -24,6 +24,10 @@ class IncidentResponse(IncidentBase):
     affected_hosts: List[str]
     affected_ips: List[str]
     event_count: int
+    finding_count: int = 0
+    participating_agents: List[str] = []
+    correlation_reasons: List[str] = []
+    correlation_window_seconds: int = 900
     ai_summary: Optional[Dict[str, Any]] = None
     attack_path_json: Optional[Dict[str, Any]] = None
     is_simulated: bool

@@ -1,6 +1,6 @@
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
 from app.models.agent import AgentExecution, AgentFinding
@@ -93,9 +93,46 @@ class BaseAgent:
         confidence: float,
         description: str,
         evidence: Dict[str, Any],
-        recommendations: List[str]
+        recommendations: List[str],
+        source_event_ids: Optional[List[str]] = None
     ) -> AgentFinding:
         fid = f"AFIND-{uuid.uuid4().hex[:8].upper()}"
+        event_ids = list(source_event_ids or [])
+        if not event_ids and isinstance(evidence, dict):
+            if "event_ids" in evidence and isinstance(evidence["event_ids"], list):
+                event_ids.extend([str(eid) for eid in evidence["event_ids"]])
+            elif "event_id" in evidence and evidence["event_id"]:
+                event_ids.append(str(evidence["event_id"]))
+
+        # Normalize and deduplicate event references
+        normalized_event_ids = sorted(list({str(eid).strip() for eid in event_ids if eid and str(eid).strip()}))
+        if isinstance(evidence, dict) and "event_ids" in evidence:
+            evidence["event_ids"] = normalized_event_ids
+
+        now = datetime.now(timezone.utc)
+        recent_cutoff = now - timedelta(seconds=900)
+
+        # Check for existing recent finding by same agent with identical title to prevent alert flooding
+        existing_finding = self.db.query(AgentFinding).filter(
+            AgentFinding.agent_name == self.name,
+            AgentFinding.title == title,
+            AgentFinding.created_at >= recent_cutoff
+        ).first()
+
+        if existing_finding:
+            # Deduplicate by updating existing finding's events and evidence
+            merged_eids = sorted(list(set(existing_finding.source_event_ids or []) | set(normalized_event_ids)))
+            existing_finding.source_event_ids = merged_eids
+            if isinstance(existing_finding.evidence, dict) and isinstance(evidence, dict):
+                merged_ev = dict(existing_finding.evidence)
+                merged_ev.update(evidence)
+                merged_ev["event_ids"] = merged_eids
+                existing_finding.evidence = merged_ev
+            self.db.commit()
+            if existing_finding not in self.findings:
+                self.findings.append(existing_finding)
+            return existing_finding
+
         finding = AgentFinding(
             finding_id=fid,
             run_id=self.run_id,
@@ -105,8 +142,9 @@ class BaseAgent:
             confidence=confidence,
             description=description,
             evidence=evidence,
+            source_event_ids=normalized_event_ids,
             recommendations=recommendations,
-            created_at=datetime.now(timezone.utc)
+            created_at=now
         )
         self.db.add(finding)
         self.db.commit()

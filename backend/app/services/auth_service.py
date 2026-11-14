@@ -53,12 +53,15 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     return user
 
 def seed_default_users(db: Session):
+    admin_pw = getattr(settings, "DEFAULT_ADMIN_PASSWORD", "Admin@SOC2026!")
+    analyst_pw = getattr(settings, "DEFAULT_ANALYST_PASSWORD", "Analyst@SOC2026!")
+
     admin_user = db.query(User).filter(User.username == "admin").first()
     if not admin_user:
         admin_user = User(
             username="admin",
             email="admin@soc-enterprise.local",
-            hashed_password=get_password_hash("Admin@SOC2026!"),
+            hashed_password=get_password_hash(admin_pw),
             full_name="Lead SOC Director",
             role="SOC Admin",
             is_active=True,
@@ -71,7 +74,7 @@ def seed_default_users(db: Session):
         analyst_user = User(
             username="analyst",
             email="analyst@soc-enterprise.local",
-            hashed_password=get_password_hash("Analyst@SOC2026!"),
+            hashed_password=get_password_hash(analyst_pw),
             full_name="Senior SOC Analyst",
             role="SOC Analyst",
             is_active=True,

@@ -44,7 +44,6 @@ export const Settings: React.FC = () => {
         badge="Security & Compliance"
         badgeVariant="royal"
         description="Configure automated containment thresholds, require administrator approvals, toggle dry-run safety modes, and inspect immutable system audit records."
-        terms={['SOAR', 'Response Verification']}
       />
 
       {savedMessage && (

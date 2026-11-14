@@ -37,7 +37,7 @@ def get_dashboard_summary(db: Session = Depends(get_db)):
     total_events = db.query(SecurityEvent).count()
     events_in_timerange = db.query(SecurityEvent).filter(SecurityEvent.timestamp >= one_day_ago).count()
     
-    open_incidents = db.query(Incident).filter(Incident.status.in_(["NEW", "INVESTIGATING"])).count()
+    open_incidents = db.query(Incident).filter(Incident.status.in_(["NEW", "INVESTIGATING", "CONTAINED"])).count()
     crit_high = db.query(Incident).filter(Incident.severity.in_(["CRITICAL", "HIGH"]), Incident.status != "RESOLVED").count()
     
     pending_approvals = db.query(ResponseAction).filter(ResponseAction.status.in_(["PENDING_APPROVAL", "RECOMMENDED"])).count()
@@ -126,7 +126,10 @@ def get_dashboard_summary(db: Session = Depends(get_db)):
             "risk_score": inc.risk_score,
             "status": inc.status,
             "created_at": utc_isoformat(inc.created_at),
-            "event_count": inc.event_count
+            "event_count": inc.event_count,
+            "finding_count": getattr(inc, "finding_count", 0),
+            "participating_agents": getattr(inc, "participating_agents", []),
+            "correlation_reasons": getattr(inc, "correlation_reasons", [])
         } for inc in crit_incidents
     ]
 

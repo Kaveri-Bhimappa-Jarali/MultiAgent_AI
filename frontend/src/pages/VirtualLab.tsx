@@ -119,7 +119,6 @@ export const VirtualLab: React.FC = () => {
         badge="Simulated Subnet 192.168.56.0/24"
         badgeVariant="gold"
         description="Multi-system testbed: Attacker VM, Endpoint Workstation VM, Internal Server VM running as local daemons simulating Linux guest telemetry without allocating 6+ GB of RAM."
-        terms={['Security Event', 'SOAR']}
         actions={
           <button
             onClick={fetchLabState}

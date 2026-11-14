@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { miniSparklines } from '../data/mockSecurityData'
@@ -33,81 +33,83 @@ export function Dashboard() {
   const [lastUpdated, setLastUpdated] = useState('Just Now')
   const [viewMode, setViewMode] = useState('pipeline')
 
-  useEffect(() => {
-    let isMounted = true
+  const loadBackendDashboard = useCallback(async () => {
+    try {
+      // Fetch dashboard summary + agent status (for total findings count) in parallel
+      const [data, agentStatuses, allIncidents] = await Promise.all([
+        api.getDashboardSummary(),
+        api.getAgentsStatus().catch(() => []),
+        api.getIncidents().catch(() => []),
+      ])
+      if (!data) return
 
-    async function loadBackendDashboard() {
-      try {
-        // Fetch dashboard summary + agent status (for total findings count) in parallel
-        const [data, agentStatuses, allIncidents] = await Promise.all([
-          api.getDashboardSummary(),
-          api.getAgentsStatus().catch(() => []),
-          api.getIncidents().catch(() => []),
-        ])
-        if (!isMounted || !data) return
+      setBackendStatus('ONLINE')
+      setLastUpdated(new Date().toLocaleTimeString())
+      if (data.event_trends) setTrends(data.event_trends)
 
-        setBackendStatus('ONLINE')
-        setLastUpdated(new Date().toLocaleTimeString())
-        if (data.event_trends) setTrends(data.event_trends)
+      const m = data.metrics || data.kpis || {}
 
-        const m = data.metrics || data.kpis || {}
+      // Total agent findings = sum of each agent's total_findings from /api/agents/status
+      const totalFindings = Array.isArray(agentStatuses)
+        ? agentStatuses.reduce((sum, a) => sum + (a.total_findings || 0), 0)
+        : 0
 
-        // Total agent findings = sum of each agent's total_findings from /api/agents/status
-        const totalFindings = Array.isArray(agentStatuses)
-          ? agentStatuses.reduce((sum, a) => sum + (a.total_findings || 0), 0)
-          : 0
+      // All incidents: total count
+      const incidentList = Array.isArray(allIncidents) ? allIncidents : []
+      const totalIncidents = incidentList.length
 
-        // All incidents: total count
-        const incidentList = Array.isArray(allIncidents) ? allIncidents : []
-        const totalIncidents = incidentList.length
+      // Correlated events = number of incidents (each incident = correlation cluster)
+      const correlatedCount = totalIncidents
 
-        // Correlated events = number of incidents (each incident = correlation cluster)
-        const correlatedCount = totalIncidents
+      // Active threats = open (non-contained) incidents
+      const openCount = m.open_incidents ?? incidentList.filter(i => i.status !== 'CONTAINED').length
 
-        // Active threats = open (non-contained) incidents
-        const openCount = m.open_incidents ?? incidentList.filter(i => i.status !== 'CONTAINED').length
+      // Critical incidents = HIGH or CRITICAL severity
+      const critCount = m.critical_high_incidents ?? incidentList.filter(i => ['CRITICAL','HIGH'].includes(i.severity)).length
 
-        // Critical incidents = HIGH or CRITICAL severity
-        const critCount = m.critical_high_incidents ?? incidentList.filter(i => ['CRITICAL','HIGH'].includes(i.severity)).length
+      // AI Analyses = findings from Investigation + Correlation agents
+      const aiCount = Array.isArray(agentStatuses)
+        ? agentStatuses
+            .filter(a => ['Investigation Agent','Correlation Agent','Attack-Path Analysis Agent'].some(n => a.name?.includes(n.split(' ')[0])))
+            .reduce((sum, a) => sum + (a.total_findings || 0), 0)
+        : totalFindings
 
-        // AI Analyses = findings from Investigation + Correlation agents
-        const aiCount = Array.isArray(agentStatuses)
-          ? agentStatuses
-              .filter(a => ['Investigation Agent','Correlation Agent','Attack-Path Analysis Agent'].some(n => a.name?.includes(n.split(' ')[0])))
-              .reduce((sum, a) => sum + (a.total_findings || 0), 0)
-          : totalFindings
+      const totalEvents = m.total_events ?? 0
 
-        const totalEvents = m.total_events ?? 0
+      setMetrics({
+        eventsReceived:    { value: totalEvents.toLocaleString(),  label: 'Events Received',    sub: 'Real-time security feed',          trend: '',                  color: '#8b5cf6' },
+        correlatedEvents:  { value: correlatedCount.toString(),     label: 'Correlated Events',  sub: 'Correlation Engine Active',         trend: `${totalIncidents} Incidents`, color: '#06b6d4' },
+        activeThreats:     { value: openCount.toString(),           label: 'Active Threats',     sub: `${critCount} High Risk`,           trend: '',                  color: '#f97316' },
+        criticalIncidents: { value: critCount.toString(),           label: 'Critical Incidents', sub: 'Needs Immediate Attention',         trend: `${m.contained_threats ?? 0} Contained`, color: '#ef4444' },
+        aiAnalyses:        { value: aiCount.toString(),             label: 'AI Analyses',        sub: 'Multi-Agent Pipeline',             trend: 'Live',              color: '#d946ef' },
+        overallRiskScore: Math.round(m.avg_risk_score || (critCount > 0 ? 70 : 30)),
+      })
 
-        setMetrics({
-          eventsReceived:    { value: totalEvents.toLocaleString(),  label: 'Events Received',    sub: 'Real-time security feed',          trend: '',                  color: '#8b5cf6' },
-          correlatedEvents:  { value: correlatedCount.toString(),     label: 'Correlated Events',  sub: 'Correlation Engine Active',         trend: `${totalIncidents} Incidents`, color: '#06b6d4' },
-          activeThreats:     { value: openCount.toString(),           label: 'Active Threats',     sub: `${critCount} High Risk`,           trend: '',                  color: '#f97316' },
-          criticalIncidents: { value: critCount.toString(),           label: 'Critical Incidents', sub: 'Needs Immediate Attention',         trend: `${m.contained_threats ?? 0} Contained`, color: '#ef4444' },
-          aiAnalyses:        { value: aiCount.toString(),             label: 'AI Analyses',        sub: 'Multi-Agent Pipeline',             trend: 'Live',              color: '#d946ef' },
-          overallRiskScore: Math.round(m.avg_risk_score || (critCount > 0 ? 70 : 30)),
-        })
-
-        // Build workflow pipeline stages from real data
-        setWorkflowData([
-          { id: 'events',      label: 'Events Received',       icon: '📥', count: totalEvents.toLocaleString(),   status: 'Active Ingest',   desc: 'Normalized Syslog, WAF & EDR streams' },
-          { id: 'correlation', label: 'Correlation Engine',    icon: '🔗', count: correlatedCount.toString(),      status: 'Correlating',     desc: 'Graph clustering & multi-event chains' },
-          { id: 'llm',         label: 'LLM Analysis',          icon: '🧠', count: aiCount.toString(),              status: 'Reasoning',       desc: 'Observation synthesis & threat diagnosis' },
-          { id: 'severity',    label: 'Severity Classification',icon: '⚠️', count: `${critCount} Critical`,        status: `Scored (${Math.round(m.avg_risk_score || 70)}/100)`, desc: 'Multi-factor risk & impact scoring' },
-          { id: 'action',      label: 'Response Decision',     icon: '⚡', count: '4 Tiers',                       status: 'Automated / Human', desc: 'Allow • Monitor • Investigate • Block' },
-        ])
-      } catch (err) {
-        if (isMounted) setBackendStatus('LOCAL_SIM')
-      }
-    }
-
-    loadBackendDashboard()
-    const interval = setInterval(loadBackendDashboard, 15000)
-    return () => {
-      isMounted = false
-      clearInterval(interval)
+      // Build workflow pipeline stages from real data
+      setWorkflowData([
+        { id: 'events',      label: 'Events Received',       icon: '📥', count: totalEvents.toLocaleString(),   status: 'Active Ingest',   desc: 'Normalized Syslog, WAF & EDR streams' },
+        { id: 'correlation', label: 'Correlation Engine',    icon: '🔗', count: correlatedCount.toString(),      status: 'Correlating',     desc: 'Graph clustering & multi-event chains' },
+        { id: 'llm',         label: 'LLM Analysis',          icon: '🧠', count: aiCount.toString(),              status: 'Reasoning',       desc: 'Observation synthesis & threat diagnosis' },
+        { id: 'severity',    label: 'Severity Classification',icon: '⚠️', count: `${critCount} Critical`,        status: `Scored (${Math.round(m.avg_risk_score || 70)}/100)`, desc: 'Multi-factor risk & impact scoring' },
+        { id: 'action',      label: 'Response Decision',     icon: '⚡', count: '4 Tiers',                       status: 'Automated / Human', desc: 'Allow • Monitor • Investigate • Block' },
+      ])
+    } catch (err) {
+      setBackendStatus('LOCAL_SIM')
     }
   }, [])
+
+  useEffect(() => {
+    loadBackendDashboard()
+    const interval = setInterval(loadBackendDashboard, 10000)
+    return () => clearInterval(interval)
+  }, [loadBackendDashboard])
+
+  // Instant refresh when WebSocket delivers new telemetry events
+  useEffect(() => {
+    if (lastAddedEvent) {
+      loadBackendDashboard()
+    }
+  }, [lastAddedEvent, loadBackendDashboard])
 
   return (
     <div className="p-4 lg:p-8 space-y-7">

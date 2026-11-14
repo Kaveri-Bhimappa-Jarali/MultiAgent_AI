@@ -3,8 +3,14 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.services.report_service import generate_incident_pdf, generate_soc_summary_pdf
+from app.services.analytics_service import get_analytics_report
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
+
+@router.get("/analytics")
+def get_soc_analytics(time_range: str = "24h", db: Session = Depends(get_db)):
+    """Provides section 9.13 analytics and report dataset."""
+    return get_analytics_report(db, time_range=time_range)
 
 @router.get("/incidents/{incident_id}/pdf")
 def download_incident_report(incident_id: str, db: Session = Depends(get_db)):

@@ -44,7 +44,7 @@ export default function App() {
           <Route path="responses" element={<Responses />} />
           <Route path="intelligence" element={<ThreatIntel />} />
           <Route path="simulation" element={<AttackSimulation />} />
-          <Route path="virtual-lab" element={<VirtualLab />} />
+          <Route path="virtual-lab" element={<AttackSimulation />} />
           <Route path="demo" element={<DemoLab />} />
           <Route path="evaluation" element={<EvaluationLab />} />
           <Route path="health-monitor" element={<IngestionHealth />} />

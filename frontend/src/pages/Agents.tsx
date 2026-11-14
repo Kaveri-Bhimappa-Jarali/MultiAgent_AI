@@ -190,14 +190,6 @@ export const Agents: React.FC = () => {
         badge="10 Segregated Agent Windows"
         badgeVariant="royal"
         description="Segregated telemetry processing, trace logs, and transparent explainability across all 10 autonomous cybersecurity agents."
-        workflowStep={{
-          stepNumber: 3,
-          totalSteps: 6,
-          stepName: 'Multi-Agent Investigation',
-          nextRoute: '/incidents',
-          nextLabel: 'Inspect Incidents (Step 4)'
-        }}
-        terms={['AI Agent', 'Correlation Engine', 'Detection Finding']}
         actions={
           <div className="flex items-center space-x-3">
             <button
@@ -327,7 +319,6 @@ export const Agents: React.FC = () => {
                       Automated Synthesis
                     </span>
                   </div>
-
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 font-mono text-xs">
                     {/* WHY */}
                     <div className="p-3.5 rounded-xl bg-navy-950/80 border border-slate-800 space-y-1.5">

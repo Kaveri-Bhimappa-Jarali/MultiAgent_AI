@@ -1,33 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Outlet } from 'react-router-dom';
-import { Sidebar } from './Sidebar';
-import { Topbar } from './Topbar';
+import { Navbar } from './Navbar';
 
 export const Layout: React.FC = () => {
-  const [collapsed, setCollapsed] = useState(() => window.matchMedia('(max-width: 767px)').matches);
-
-  useEffect(() => {
-    const narrowScreen = window.matchMedia('(max-width: 767px)');
-    const collapseOnNarrowScreen = () => {
-      if (narrowScreen.matches) setCollapsed(true);
-    };
-    narrowScreen.addEventListener('change', collapseOnNarrowScreen);
-    return () => narrowScreen.removeEventListener('change', collapseOnNarrowScreen);
-  }, []);
-
   return (
-    <div className="min-h-screen bg-midnight text-softwhite">
-      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
-      <Topbar sidebarCollapsed={collapsed} />
-      <main
-        className={`transition-all duration-300 pt-20 pb-12 px-3 sm:px-6 min-h-screen ${
-          collapsed ? 'ml-20' : 'ml-64'
-        }`}
-      >
-        <div className="max-w-7xl mx-auto">
-          <Outlet />
-        </div>
+    <div className="min-h-screen bg-midnight text-softwhite flex flex-col">
+      <Navbar />
+      <main className="flex-1 w-full max-w-[1680px] mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-12">
+        <Outlet />
       </main>
+      <footer className="border-t border-navy-800/80 py-4 px-6 text-center text-xs text-slate-500 font-mono">
+        ROYAL SOC Enterprise Security Operations • Autonomous Multi-Agent Threat Detection &amp; Verified Containment
+      </footer>
     </div>
   );
 };

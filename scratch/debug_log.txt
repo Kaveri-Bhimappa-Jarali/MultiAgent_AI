@@ -1,0 +1,5 @@
+Step 1: started
+Step 2: sys.path set
+Step 3: config loaded, db url: sqlite:///./soc_enterprise.db
+Step 4: db module loaded
+Step 5: app imported

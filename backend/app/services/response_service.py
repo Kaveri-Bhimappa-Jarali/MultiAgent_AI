@@ -29,6 +29,7 @@ from app.services.audit_service import log_audit_entry
 SIMULATABLE_ACTIONS = {
     "BLOCK_IP": "Would add a firewall deny rule for the specified IP address.",
     "ISOLATE_ENDPOINT": "Would restrict the specified endpoint to its SOC management channel.",
+    "ISOLATE_HOST": "Would restrict the specified host to its SOC management channel.",
     "DISABLE_USER": "Would disable sign-in for the specified identity.",
 }
 
@@ -159,7 +160,12 @@ def execute_response_action(db: Session, action_id: str, actor: str, dry_run: Op
                 status_code=409,
                 detail="No matching registered ENDPOINT VM is available; no isolation command was dispatched",
             )
-        command_to_run = "iptables -I INPUT -i lo -j ACCEPT; iptables -I INPUT -s 192.168.56.1 -j ACCEPT; iptables -P INPUT DROP; iptables -P FORWARD DROP"
+        command_to_run = (
+            "iptables -I INPUT -i lo -j ACCEPT; "
+            "iptables -I INPUT -p tcp --dport 22 -j ACCEPT; "
+            "iptables -I INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT; "
+            "iptables -P INPUT DROP; iptables -P FORWARD DROP"
+        )
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported response action type '{action.action_type}'")
 

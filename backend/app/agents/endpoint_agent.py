@@ -13,7 +13,11 @@ class EndpointAgent(BaseAgent):
         self.log("INFO", f"Analyzing {len(endpoint_events)} host-level operational events across managed endpoints")
 
         findings_count = 0
-        for e in endpoint_events:
+        primary_evt = context.get("primary_event")
+        target_events = [primary_evt] if (primary_evt and primary_evt.event_type in ["process_execution", "file_access", "privilege_escalation"]) else endpoint_events
+        for e in target_events:
+            if not e:
+                continue
             # 1. Process execution check
             if e.event_type == "process_execution":
                 proc = (e.process_name or "").lower()
@@ -29,12 +33,15 @@ class EndpointAgent(BaseAgent):
                             "host": e.host,
                             "process_name": e.process_name,
                             "command_line": e.command_line,
-                            "mitre_technique": "T1490"
+                            "user": e.username,
+                            "mitre_technique": "T1490",
+                            "event_ids": [e.event_id]
                         },
                         recommendations=[
                             f"Immediately isolate host {e.host} from network",
                             "Initiate automated ransomware containment protocol"
-                        ]
+                        ],
+                        source_event_ids=[e.event_id]
                     )
                     findings_count += 1
                 elif "powershell" in proc and ("-enc" in cmd or "downloadstring" in cmd):
@@ -47,12 +54,14 @@ class EndpointAgent(BaseAgent):
                             "host": e.host,
                             "process_name": e.process_name,
                             "command_line": e.command_line,
-                            "user": e.username
+                            "user": e.username,
+                            "event_ids": [e.event_id]
                         },
                         recommendations=[
                             f"Collect script block logs and dump process memory on {e.host}",
                             "Kill offending process PID and isolate endpoint"
-                        ]
+                        ],
+                        source_event_ids=[e.event_id]
                     )
                     findings_count += 1
 
@@ -66,12 +75,15 @@ class EndpointAgent(BaseAgent):
                     evidence={
                         "host": e.host,
                         "user": e.username,
-                        "command": e.command_line
+                        "username": e.username,
+                        "command": e.command_line,
+                        "event_ids": [e.event_id]
                     },
                     recommendations=[
                         f"Terminate active shell sessions for '{e.username}'",
                         f"Isolate host {e.host} to prevent credential dumping"
-                    ]
+                    ],
+                    source_event_ids=[e.event_id]
                 )
                 findings_count += 1
 
@@ -87,17 +99,67 @@ class EndpointAgent(BaseAgent):
                         evidence={
                             "host": e.host,
                             "user": e.username,
+                            "username": e.username,
                             "file_path": e.file_path,
-                            "action": e.file_action
+                            "action": e.file_action,
+                            "event_ids": [e.event_id]
                         },
                         recommendations=[
                             "Review file access authorization matrix",
                             "Verify whether data staging or exfiltration occurred"
-                        ]
+                        ],
+                        source_event_ids=[e.event_id]
+                    )
+                    findings_count += 1
+
+        # 4. Host Web Application Resource Exhaustion (HTTP Request Burst - MITRE T1499.002)
+        web_events = [
+            e for e in events
+            if e.destination_port in [80, 443, 8080]
+            or "nginx" in (e.command_line or "").lower()
+            or (getattr(e, "file_action", "") and any(w in getattr(e, "file_action", "").upper() for w in ["WEB", "HTTP", "BURST"]))
+            or "http" in (e.command_line or "").lower()
+        ]
+
+        if web_events:
+            from collections import defaultdict
+            bursts_by_target = defaultdict(list)
+            for we in web_events:
+                t_host = we.host or "vm-endpoint-01"
+                s_ip = we.source_ip or "unknown"
+                bursts_by_target[(t_host, s_ip)].append(we)
+
+            for (t_host, s_ip), h_evts in bursts_by_target.items():
+                is_burst = (
+                    len(h_evts) >= 2
+                    or any("burst" in (e.command_line or "").lower() for e in h_evts)
+                    or any(getattr(e, "file_action", "") == "WEB_BURST" for e in h_evts)
+                )
+                if is_burst:
+                    burst_eids = [e.event_id for e in h_evts]
+                    self.record_finding(
+                        title=f"Endpoint Web Application Resource Exhaustion (HTTP Burst) on {t_host}",
+                        severity="HIGH",
+                        confidence=0.94,
+                        description=f"Host {t_host} web service is under application exhaustion attack: rapid burst of {len(h_evts)} HTTP requests from {s_ip} (MITRE ATT&CK T1499.002).",
+                        evidence={
+                            "host": t_host,
+                            "source_ip": s_ip,
+                            "service": "Nginx Web Server",
+                            "target_port": 80,
+                            "requests_count": len(h_evts),
+                            "mitre_technique": "T1499.002",
+                            "event_ids": burst_eids
+                        },
+                        recommendations=[
+                            f"Apply rate limiting and request throttling on host {t_host} Nginx service",
+                            f"Deploy automated firewall containment rule to block {s_ip}"
+                        ],
+                        source_event_ids=burst_eids
                     )
                     findings_count += 1
 
         return {
-            "endpoint_events_evaluated": len(endpoint_events),
+            "endpoint_events_evaluated": len(endpoint_events) + len(web_events),
             "findings_count": findings_count
         }

@@ -31,8 +31,23 @@ def get_agent_runs(limit: int = Query(30, ge=1, le=100), db: Session = Depends(g
     return [AgentExecutionResponse.model_validate(r) for r in runs]
 
 @router.get("/findings", response_model=List[AgentFindingResponse])
-def get_agent_findings(limit: int = Query(50, ge=1, le=200), db: Session = Depends(get_db)):
-    findings = db.query(AgentFinding).order_by(AgentFinding.created_at.desc()).limit(limit).all()
+def get_agent_findings(
+    uncorrelated: Optional[bool] = Query(None),
+    agent_name: Optional[str] = Query(None),
+    incident_id: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db)
+):
+    query = db.query(AgentFinding)
+    if uncorrelated is True:
+        query = query.filter(AgentFinding.incident_id == None)
+    elif uncorrelated is False:
+        query = query.filter(AgentFinding.incident_id != None)
+    if incident_id:
+        query = query.filter(AgentFinding.incident_id == incident_id)
+    if agent_name:
+        query = query.filter(AgentFinding.agent_name == agent_name)
+    findings = query.order_by(AgentFinding.created_at.desc()).limit(limit).all()
     return [AgentFindingResponse.model_validate(f) for f in findings]
 
 @router.post("/run")

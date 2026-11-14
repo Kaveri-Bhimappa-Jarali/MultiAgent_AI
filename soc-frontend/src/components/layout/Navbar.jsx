@@ -53,8 +53,7 @@ const MODULE_GROUPS = [
   {
     category: 'LABS & SIMULATION',
     items: [
-      { to: '/simulation', label: 'Attack Simulation', icon: Crosshair, desc: 'Adversary Emulation Console' },
-      { to: '/virtual-lab', label: 'Virtual Enterprise Lab', icon: Network, desc: '3-Node Guest Daemon Network' },
+      { to: '/simulation', label: 'Virtual Lab & Attack Simulation', icon: Crosshair, desc: 'Connected VM Nodes & Adversary Simulation', badge: 'Live' },
       { to: '/demo', label: 'Interactive Demo Lab', icon: FlaskConical, desc: '1-Click Scenario Injections' },
       { to: '/evaluation', label: 'ML Evaluation Lab', icon: Cpu, desc: 'UNSW-NB15 & CICIDS Benchmarks' },
     ]

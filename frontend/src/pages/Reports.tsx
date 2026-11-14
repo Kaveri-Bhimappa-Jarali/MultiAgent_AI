@@ -38,7 +38,6 @@ export const Reports: React.FC = () => {
         badge="Compliance & Audit"
         badgeVariant="gold"
         description="Generate and download branded PDF executive summary briefings and detailed incident forensic dossiers for management and compliance reviews."
-        terms={['Incident', 'Risk Score', 'SOAR']}
       />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

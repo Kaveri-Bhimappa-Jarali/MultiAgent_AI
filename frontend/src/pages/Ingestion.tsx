@@ -115,7 +115,6 @@ export const Ingestion: React.FC = () => {
         badge="Canonical Parser"
         badgeVariant="royal"
         description="Manually ingest individual security events or import JSON batches to test validation, normalization, and immediate threat detection triggering."
-        terms={['Security Event', 'Detection']}
       />
 
       {/* Result / Error Notification */}

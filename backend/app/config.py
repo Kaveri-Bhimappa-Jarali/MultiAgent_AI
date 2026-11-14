@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "SOC_ENTERPRISE_ROYAL_SECRET_KEY_CHANGE_IN_PRODUCTION_9921"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
+    DEFAULT_ADMIN_PASSWORD: str = "Admin@SOC2026!"
+    DEFAULT_ANALYST_PASSWORD: str = "Analyst@SOC2026!"
     
     # Database
     DATABASE_URL: str = "sqlite:///./soc_enterprise.db"
@@ -32,24 +34,25 @@ class Settings(BaseSettings):
     DEFAULT_RISK_THRESHOLD_AUTO_CONTAIN: int = 85
 
     # Attacker VM
-    ATTACKER_VM_HOST: str = "45.74.156.44"
-    ATTACKER_VM_PRIVATE_IP: str = "10.0.0.12"
+    ATTACKER_VM_HOST: str = "45.74.156.41"
+    ATTACKER_VM_PRIVATE_IP: str = "10.0.0.13"
     ATTACKER_VM_USER: str = "ubuntu"
     ATTACKER_VM_SSH_PORT: int = 22
-    ATTACKER_VM_SSH_KEY_PATH: str = ""
+    ATTACKER_VM_SSH_KEY_PATH: str = "C:/Users/VICTUS/.ssh/soc_lab"
 
     # Victim VM
-    VICTIM_VM_HOST: str = "45.74.156.43"
-    VICTIM_VM_PRIVATE_IP: str = "10.0.0.11"
+    VICTIM_VM_HOST: str = "45.74.156.44"
+    VICTIM_VM_PRIVATE_IP: str = "10.0.0.12"
     VICTIM_VM_USER: str = "ubuntu"
     VICTIM_VM_SSH_PORT: int = 22
+    VICTIM_VM_SSH_KEY_PATH: str = "C:/Users/VICTUS/.ssh/soc_lab"
     VICTIM_VM_INTERFACE: str = "eth0"
 
     # Attack Simulation Configuration
     ATTACK_SIMULATION_ENABLED: bool = True
     ATTACK_SIMULATION_MAX_CONCURRENT: int = 1
     ATTACK_SIMULATION_TIMEOUT: int = 300
-    ATTACK_SIMULATION_ALLOWED_TARGETS: str = "10.0.0.11"
+    ATTACK_SIMULATION_ALLOWED_TARGETS: str = "10.0.0.12"
 
     class Config:
         env_file = (".env", "backend/.env", "../.env")

@@ -1,6 +1,7 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, Float, JSON
+from sqlalchemy import Column, Integer, String, DateTime, Text, Float, JSON, ForeignKey
 from datetime import datetime, timezone
 from app.database import Base
+from app.models.event import UTCDateTime
 
 class AgentExecution(Base):
     __tablename__ = "agent_executions"
@@ -9,8 +10,8 @@ class AgentExecution(Base):
     run_id = Column(String(64), index=True, nullable=False)
     agent_name = Column(String(100), index=True, nullable=False)
     status = Column(String(30), default="IDLE", index=True, nullable=False)  # IDLE, RUNNING, COMPLETED, FAILED
-    start_time = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    end_time = Column(DateTime, nullable=True)
+    start_time = Column(UTCDateTime(), default=lambda: datetime.now(timezone.utc), nullable=False)
+    end_time = Column(UTCDateTime(), nullable=True)
     duration_ms = Column(Integer, default=0, nullable=False)
     input_summary = Column(Text, nullable=True)
     findings_count = Column(Integer, default=0, nullable=False)
@@ -24,10 +25,12 @@ class AgentFinding(Base):
     finding_id = Column(String(64), unique=True, index=True, nullable=False)
     run_id = Column(String(64), index=True, nullable=False)
     agent_name = Column(String(100), index=True, nullable=False)
+    incident_id = Column(String(64), ForeignKey("incidents.incident_id", ondelete="SET NULL"), nullable=True, index=True)
     title = Column(String(200), nullable=False)
     severity = Column(String(20), default="MEDIUM", nullable=False)
     confidence = Column(Float, default=0.85, nullable=False)
     description = Column(Text, nullable=False)
     evidence = Column(JSON, default=dict, nullable=False)
+    source_event_ids = Column(JSON, default=list, nullable=False)
     recommendations = Column(JSON, default=list, nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    created_at = Column(UTCDateTime(), default=lambda: datetime.now(timezone.utc), nullable=False)

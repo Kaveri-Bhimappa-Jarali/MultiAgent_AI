@@ -105,11 +105,12 @@ def test_duplicate_event_handling(db_session):
 def test_event_driven_agent_orchestration_and_correlation(db_session):
     """
     Verifies that selective agent dispatch executes only the domain-relevant agents,
-    correlates findings into an incident, and generates attack-path topology.
+    does NOT prematurely create an incident on a single event/finding, but correlates
+    when multiple related findings arrive within the 900s window.
     """
     t_start = time.perf_counter()
 
-    # Step 1: Authentication failure burst
+    # Step 1: Authentication failure burst (Single finding)
     evt_auth = SecurityEvent(
         event_id="EVT-CORR-01",
         timestamp=datetime.now(timezone.utc),
@@ -126,21 +127,47 @@ def test_event_driven_agent_orchestration_and_correlation(db_session):
     db_session.add(evt_auth)
     db_session.commit()
 
-    findings = evaluate_event_with_rolling_window(db_session, evt_auth)
+    findings1 = evaluate_event_with_rolling_window(db_session, evt_auth)
     engine = MultiAgentSOCEngine(db_session)
-    res = engine.dispatch_event_driven_pipeline(evt_auth, findings)
-
-    total_time_ms = (time.perf_counter() - t_start) * 1000
-    print(f"\n[MEASURED] Event-to-incident correlation latency: {total_time_ms:.2f} ms")
+    res1 = engine.dispatch_event_driven_pipeline(evt_auth, findings1)
 
     # Agents executed
-    assert res["agents_executed"] > 0
-    
-    # Check incident was created or updated
+    assert res1["agents_executed"] > 0
+
+    # With only 1 finding, NO correlated incident should be created!
+    inc_single = db_session.query(Incident).filter(Incident.affected_users.contains(["john.connor"])).first()
+    assert inc_single is None, "A single event/finding must not create a correlated incident!"
+
+    # Step 2: Second related event arrives on the same host/user (Suspicious LOLBin execution)
+    evt_ep = SecurityEvent(
+        event_id="EVT-CORR-02",
+        timestamp=datetime.now(timezone.utc),
+        event_type="process_execution",
+        severity="HIGH",
+        source_ip="203.0.113.88",
+        username="john.connor",
+        host="WS-SEC-99",
+        process_name="powershell.exe",
+        command_line="powershell.exe -enc SQBFAFgAIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQA...",
+        detection_status="UNPROCESSED",
+        processing_status="PROCESSING"
+    )
+    db_session.add(evt_ep)
+    db_session.commit()
+
+    findings2 = evaluate_event_with_rolling_window(db_session, evt_ep)
+    res2 = engine.dispatch_event_driven_pipeline(evt_ep, findings2)
+
+    total_time_ms = (time.perf_counter() - t_start) * 1000
+    print(f"\n[MEASURED] Multi-agent event-to-incident correlation latency: {total_time_ms:.2f} ms")
+
+    # Now that two distinct related findings exist within 900s, an incident MUST be created!
     inc = db_session.query(Incident).filter(Incident.affected_users.contains(["john.connor"])).first()
     if not inc:
         inc = db_session.query(Incident).order_by(Incident.created_at.desc()).first()
-    assert inc is not None
+    assert inc is not None, "Multiple related findings within 900s must be correlated into an incident!"
+    assert inc.finding_count >= 2
+    assert len(inc.participating_agents) >= 2
     assert inc.risk_score >= 50
 
 def test_response_workflow_and_verification(db_session):

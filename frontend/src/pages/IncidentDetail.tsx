@@ -221,7 +221,30 @@ export const IncidentDetail: React.FC = () => {
               <div>Last Activity: <span className="text-softwhite">{formatSocTimestamp(incident.last_seen)}</span></div>
               <div>Assigned Analyst: <span className="text-gold font-semibold">{incident.assigned_analyst}</span></div>
               <div>Telemetry Events: <span className="text-softwhite font-bold">{incident.event_count}</span></div>
+              <div>Correlated Findings: <span className="text-softwhite font-bold">{incident.finding_count || incident.agent_findings?.length || 0}</span></div>
             </div>
+
+            {incident.participating_agents && incident.participating_agents.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 pt-1 text-xs font-mono">
+                <span className="text-mutedslate">Participating Agents:</span>
+                {incident.participating_agents.map((ag) => (
+                  <span key={ag} className="px-2 py-0.5 rounded bg-royal/15 text-royal-200 border border-royal/30 font-semibold text-[11px]">
+                    {ag}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {incident.correlation_reasons && incident.correlation_reasons.length > 0 && (
+              <div className="p-3 rounded-xl bg-navy-900 border border-navy-750 text-xs font-mono space-y-1 mt-2">
+                <span className="text-gold font-semibold uppercase text-[10px] tracking-wider">Correlation Rationale (900s Window)</span>
+                <ul className="list-disc list-inside text-slate-300 space-y-0.5 text-[11px]">
+                  {incident.correlation_reasons.map((r, i) => (
+                    <li key={i}>{r}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
 
           {/* Risk Gauge Card */}
@@ -491,6 +514,56 @@ export const IncidentDetail: React.FC = () => {
           ))}
         </div>
       )}
+
+      {/* 6. Correlated Agent Findings */}
+      <div className="p-6 rounded-2xl bg-navy-800 border border-slate-800 shadow-xl space-y-4">
+        <div className="flex items-center justify-between pb-3 border-b border-navy-700">
+          <div className="flex items-center space-x-2.5">
+            <Bot className="w-5 h-5 text-royal-200" />
+            <h2 className="text-sm font-bold text-softwhite uppercase tracking-wider font-mono">
+              Correlated Agent Findings ({incident.agent_findings?.length || incident.finding_count || 0} Findings)
+            </h2>
+          </div>
+          <span className="text-xs text-mutedslate font-mono">Domain specialist observations correlated within 900s window</span>
+        </div>
+
+        {(!incident.agent_findings || incident.agent_findings.length === 0) ? (
+          <p className="text-xs text-mutedslate font-mono py-4 text-center">
+            No linked agent findings found for this incident.
+          </p>
+        ) : (
+          <div className="space-y-3 font-mono text-xs">
+            {incident.agent_findings.map((af) => (
+              <div
+                key={af.finding_id}
+                className="p-4 rounded-xl bg-navy-900 border border-slate-800 space-y-2 hover:border-slate-700 transition"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center space-x-2.5">
+                    <span className="px-2 py-0.5 rounded bg-royal/20 text-royal-200 border border-royal/30 font-semibold text-[11px]">
+                      {af.agent_name}
+                    </span>
+                    <span className="font-bold text-softwhite text-xs">{af.title}</span>
+                    <span className="text-[10px] text-mutedslate">({af.finding_id})</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <SeverityBadge severity={af.severity} size="sm" />
+                    <span className="text-[10px] text-slate-400">Conf: {Math.round(af.confidence * 100)}%</span>
+                    <span className="text-[10px] text-slate-500">{formatSocTimestamp(af.created_at)}</span>
+                  </div>
+                </div>
+                <p className="text-slate-300 font-sans leading-relaxed text-xs">{af.description}</p>
+                {af.recommendations && af.recommendations.length > 0 && (
+                  <div className="text-[11px] text-slate-400 font-sans pt-1">
+                    <span className="text-gold font-semibold font-mono">Recommendation: </span>
+                    {af.recommendations.join('; ')}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* 7. Chronological Event Timeline */}
       <div className="p-6 rounded-2xl bg-navy-800 border border-slate-800 shadow-xl space-y-4">

@@ -2,7 +2,7 @@ from app.models.user import User
 from app.models.event import SecurityEvent
 from app.models.detection import DetectionRule, DetectionFinding
 from app.models.agent import AgentExecution, AgentFinding
-from app.models.incident import Incident, IncidentEvent, IncidentNote, IncidentAudit
+from app.models.incident import Incident, IncidentEvent, IncidentFinding, IncidentNote, IncidentAudit
 from app.models.risk import RiskAssessment
 from app.models.response import ResponseAction, VerificationResult
 from app.models.threat_intel import ThreatIndicator
@@ -21,6 +21,7 @@ __all__ = [
     "AgentFinding",
     "Incident",
     "IncidentEvent",
+    "IncidentFinding",
     "IncidentNote",
     "IncidentAudit",
     "RiskAssessment",
