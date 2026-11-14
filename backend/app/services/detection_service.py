@@ -720,7 +720,8 @@ def evaluate_event_with_rolling_window(db: Session, evt: SecurityEvent) -> List[
     try:
         from app.services.dataset_pipeline import extract_flow_features_from_event, run_realtime_flow_inference
         flow_features = extract_flow_features_from_event(evt)
-        if flow_features and len(flow_features) > 0:
+        # Require genuine multi-attribute flow metrics and non-INFO severity to prevent false positives on benign web traffic
+        if flow_features and len(flow_features) >= 3 and evt.severity != "INFO":
             ml_res = run_realtime_flow_inference(flow_features)
             if ml_res.get("ml_evaluated") and ml_res.get("is_malicious") and ml_res.get("attack_probability", 0) >= 0.50:
                 if not is_finding_duplicated("RULE-ML-001", evt.event_id, window_seconds=30):

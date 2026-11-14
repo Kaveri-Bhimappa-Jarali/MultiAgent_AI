@@ -57,17 +57,11 @@ export function Dashboard() {
           ? agentStatuses.reduce((sum, a) => sum + (a.total_findings || 0), 0)
           : 0
 
-        // All incidents: total count
+        // All incidents & explicit correlation metrics
         const incidentList = Array.isArray(allIncidents) ? allIncidents : []
-        const totalIncidents = incidentList.length
-
-        // Correlated events = number of incidents (each incident = correlation cluster)
-        const correlatedCount = totalIncidents
-
-        // Active threats = open (non-contained) incidents
-        const openCount = m.open_incidents ?? incidentList.filter(i => i.status !== 'CONTAINED').length
-
-        // Critical incidents = HIGH or CRITICAL severity
+        const uniqueIncidents = m.unique_correlated_incidents ?? incidentList.length
+        const correlationMatches = m.correlation_matches ?? incidentList.filter(i => Boolean(i.correlation_reasons && i.correlation_reasons.length)).length
+        const openCount = m.active_incidents ?? incidentList.filter(i => i.status !== 'CONTAINED' && i.status !== 'RESOLVED').length
         const critCount = m.critical_high_incidents ?? incidentList.filter(i => ['CRITICAL','HIGH'].includes(i.severity)).length
 
         // AI Analyses = findings from Investigation + Correlation agents
@@ -80,11 +74,11 @@ export function Dashboard() {
         const totalEvents = m.total_events ?? 0
 
         setMetrics({
-          eventsReceived:    { value: totalEvents.toLocaleString(),  label: 'Events Received',    sub: 'Real-time security feed',          trend: '',                  color: '#8b5cf6' },
-          correlatedEvents:  { value: correlatedCount.toString(),     label: 'Correlated Events',  sub: 'Correlation Engine Active',         trend: `${totalIncidents} Incidents`, color: '#06b6d4' },
-          activeThreats:     { value: openCount.toString(),           label: 'Active Threats',     sub: `${critCount} High Risk`,           trend: '',                  color: '#f97316' },
-          criticalIncidents: { value: critCount.toString(),           label: 'Critical Incidents', sub: 'Needs Immediate Attention',         trend: `${m.contained_threats ?? 0} Contained`, color: '#ef4444' },
-          aiAnalyses:        { value: aiCount.toString(),             label: 'AI Analyses',        sub: 'Multi-Agent Pipeline',             trend: 'Live',              color: '#d946ef' },
+          eventsReceived:    { value: totalEvents.toLocaleString(),  label: 'Events Received',       sub: 'Real-time security feed',          trend: '',                  color: '#8b5cf6' },
+          correlatedEvents:  { value: uniqueIncidents.toString(),    label: 'Correlated Incidents',  sub: `${correlationMatches} Verified Clusters`, trend: `${openCount} Active`, color: '#06b6d4' },
+          activeThreats:     { value: openCount.toString(),          label: 'Active Threats',        sub: `${critCount} High Risk`,           trend: '',                  color: '#f97316' },
+          criticalIncidents: { value: critCount.toString(),          label: 'Critical Incidents',    sub: 'Needs Immediate Attention',         trend: `${m.contained_threats ?? 0} Contained`, color: '#ef4444' },
+          aiAnalyses:        { value: aiCount.toString(),            label: 'AI Analyses',           sub: 'Multi-Agent Pipeline',             trend: 'Live',              color: '#d946ef' },
           overallRiskScore: Math.round(m.avg_risk_score || (critCount > 0 ? 70 : 30)),
         })
 

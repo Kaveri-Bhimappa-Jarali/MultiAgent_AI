@@ -22,6 +22,12 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173",
         "http://localhost:8000",
         "http://127.0.0.1:8000",
+        "http://192.168.56.1:5173",
+        "http://192.168.56.1:8000",
+        "http://192.168.56.10:3000",
+        "http://192.168.56.15:3000",
+        "http://192.168.56.20:3000",
+        "*"
     ]
     
     # LLM Settings (optional - graceful fallback provided)
@@ -32,6 +38,13 @@ class Settings(BaseSettings):
     # SOC Engine
     DEMO_MODE_DEFAULT: bool = True
     DEFAULT_RISK_THRESHOLD_AUTO_CONTAIN: int = 85
+
+    # SOC Network & VM Integration
+    SOC_HOST_IP: str = os.environ.get("SOC_HOST_IP", "192.168.56.1")
+    SOC_HOST_PORT: int = int(os.environ.get("SOC_HOST_PORT", "8000"))
+    SYSLOG_LISTEN_HOST: str = os.environ.get("SYSLOG_LISTEN_HOST", "0.0.0.0")
+    SYSLOG_LISTEN_PORT: int = int(os.environ.get("SYSLOG_LISTEN_PORT", "5514"))
+    ALLOWED_LAB_SUBNETS: str = os.environ.get("ALLOWED_LAB_SUBNETS", "192.168.0.0/16,10.0.0.0/8,172.16.0.0/12,127.0.0.0/8")
 
     # Attacker VM
     ATTACKER_VM_HOST: str = "45.74.156.44"

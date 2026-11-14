@@ -32,16 +32,30 @@ class SyslogCollector(BaseCollector):
         if self.is_running:
             return
         loop = asyncio.get_running_loop()
-        try:
-            self.transport, _ = await loop.create_datagram_endpoint(
-                lambda: SyslogProtocol(self),
-                local_addr=("127.0.0.1", self.port)
-            )
-            self.is_running = True
-            print(f"[{self.collector_id}] Syslog UDP collector listening on 127.0.0.1:{self.port}")
-        except Exception as e:
+        # Bind to 0.0.0.0 so both local synthetic tests and external VMs (192.168.56.x) can deliver syslog
+        bind_addrs = [("0.0.0.0", self.port), ("127.0.0.1", self.port)]
+        bound = False
+        last_err = None
+
+        for addr in bind_addrs:
+            try:
+                self.transport, _ = await asyncio.wait_for(
+                    loop.create_datagram_endpoint(
+                        lambda: SyslogProtocol(self),
+                        local_addr=addr
+                    ),
+                    timeout=2.0
+                )
+                self.is_running = True
+                bound = True
+                print(f"[{self.collector_id}] Syslog UDP collector listening on {addr[0]}:{self.port}")
+                break
+            except Exception as e:
+                last_err = e
+
+        if not bound:
             self.error_count += 1
-            self.error_message = f"Failed binding syslog port {self.port}: {e}"
+            self.error_message = f"Failed binding syslog port {self.port}: {last_err}"
             print(f"[{self.collector_id}] {self.error_message}")
 
     async def stop(self):

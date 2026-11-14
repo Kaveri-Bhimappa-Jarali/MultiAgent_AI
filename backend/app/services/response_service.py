@@ -1,3 +1,4 @@
+from app.config import settings
 """
 Policy-Governed SOAR Defensive Response Desk
 ============================================
@@ -160,7 +161,7 @@ def execute_response_action(db: Session, action_id: str, actor: str, dry_run: Op
                 status_code=409,
                 detail="No matching registered ENDPOINT VM is available; no isolation command was dispatched",
             )
-        command_to_run = "iptables -I INPUT -i lo -j ACCEPT; iptables -I INPUT -s 192.168.56.1 -j ACCEPT; iptables -P INPUT DROP; iptables -P FORWARD DROP"
+        command_to_run = f"iptables -I INPUT -i lo -j ACCEPT; iptables -I INPUT -s {settings.SOC_HOST_IP} -j ACCEPT; iptables -P INPUT DROP; iptables -P FORWARD DROP"
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported response action type '{action.action_type}'")
 

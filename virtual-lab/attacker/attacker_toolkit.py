@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
 Attacker / Security Testbed VM Toolkit.
-Runs inside the Attacker VM (192.168.56.20 or test node) to generate authorized,
+Runs inside the Attacker VM (e.g. vm-attacker-01) to generate authorized,
 controlled security activities (SSH brute force, TCP port scanning, multi-stage probes)
-targeting the Endpoint VM (192.168.56.10) and Server VM (192.168.56.15).
+targeting the Endpoint VM and Server VM.
 
 Security Constraints:
-- Restricted SOLELY to the isolated private lab subnet (192.168.56.0/24) and loopback.
-- Strictly rejects any external public IP addresses.
+- Restricted SOLELY to private RFC1918 lab subnets (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) and loopback.
+- Strictly blocks and rejects any external public/routable IP addresses.
 """
 
 import sys
@@ -15,25 +15,23 @@ import time
 import socket
 import argparse
 import ipaddress
+import os
 from datetime import datetime
 
-ALLOWED_LAB_NETWORKS = [
-    ipaddress.ip_network("192.168.56.0/24"),  # Isolated host-only lab subnet
-    ipaddress.ip_network("127.0.0.0/8"),      # Loopback for local tests
-]
-
 def validate_lab_target(target_ip: str):
-    """Enforces that target is strictly within authorized isolated lab subnets."""
+    """Enforces that target is strictly within private RFC1918 lab subnets and never public internet."""
     try:
         ip = ipaddress.ip_address(target_ip)
-        if not any(ip in net for net in ALLOWED_LAB_NETWORKS):
+        if not ip.is_private and not ip.is_loopback:
             raise PermissionError(
-                f"[SECURITY VIOLATION] Target IP {target_ip} is outside the authorized "
-                f"isolated lab network (192.168.56.0/24). Targeting external public networks is strictly forbidden."
+                f"[SECURITY VIOLATION] Target IP {target_ip} is a public routable internet address! "
+                f"Security testing against external public networks is strictly forbidden."
             )
     except ValueError:
         if target_ip.lower() not in ["localhost", "127.0.0.1"]:
-            raise PermissionError(f"[SECURITY VIOLATION] Target hostname '{target_ip}' must resolve to 192.168.56.0/24 or localhost.")
+            raise PermissionError(
+                f"[SECURITY VIOLATION] Target hostname '{target_ip}' must resolve to a private RFC1918 lab address."
+            )
 
 def test_tcp_connect(target_ip: str, port: int, timeout: float = 1.0) -> bool:
     validate_lab_target(target_ip)
@@ -99,9 +97,9 @@ def run_multi_stage_intrusion(target_ip: str):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Attacker VM Security Activity Generator (Authorized Lab Use Only)")
-    parser.add_argument("--target", default="192.168.56.15", help="Target Server/Endpoint IP in 192.168.56.0/24")
-    parser.add_argument("--scenario", choices=["brute_force", "port_scan", "multi_stage", "all"], default="brute_force")
-    parser.add_argument("--port", type=int, default=22, help="Target port for brute-force")
+    parser.add_argument("--target", "-t", default=os.environ.get("VICTIM_IP", "192.168.56.15"), help="Target Server/Endpoint private IP")
+    parser.add_argument("--scenario", "-s", choices=["brute_force", "port_scan", "multi_stage", "all"], default="brute_force")
+    parser.add_argument("--port", "-p", type=int, default=22, help="Target port for brute-force")
     args = parser.parse_args()
 
     print("=" * 65)

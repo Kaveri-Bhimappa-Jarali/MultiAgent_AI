@@ -40,6 +40,12 @@ def get_dashboard_summary(db: Session = Depends(get_db)):
     open_incidents = db.query(Incident).filter(Incident.status.in_(["NEW", "INVESTIGATING", "CONTAINED"])).count()
     crit_high = db.query(Incident).filter(Incident.severity.in_(["CRITICAL", "HIGH"]), Incident.status != "RESOLVED").count()
     
+    unique_correlated_incidents = db.query(Incident).count()
+    active_incidents = db.query(Incident).filter(Incident.status.in_(["NEW", "INVESTIGATING", "CONTAINED"])).count()
+    historical_incidents = db.query(Incident).filter(Incident.status.in_(["RESOLVED", "CLOSED"])).count()
+    correlation_matches = db.query(Incident).filter(Incident.correlation_reasons.isnot(None)).count()
+    correlation_attempts = db.query(AgentExecution).filter(AgentExecution.agent_name.like("%Correlation%")).count()
+
     pending_approvals = db.query(ResponseAction).filter(ResponseAction.status.in_(["PENDING_APPROVAL", "RECOMMENDED"])).count()
     contained_threats = db.query(Incident).filter(Incident.status == "CONTAINED").count()
     verification_failures = db.query(VerificationResult).filter(VerificationResult.verification_status == "VERIFICATION_FAILED").count()
@@ -69,7 +75,12 @@ def get_dashboard_summary(db: Session = Depends(get_db)):
         incidents_awaiting_investigation=awaiting_investigation,
         actions_pending_approval=pending_approvals,
         contained_threats=contained_threats,
-        verification_failures=verification_failures
+        verification_failures=verification_failures,
+        unique_correlated_incidents=unique_correlated_incidents,
+        correlation_matches=correlation_matches,
+        correlation_attempts=correlation_attempts,
+        active_incidents=active_incidents,
+        historical_incidents=historical_incidents
     )
 
     # Hourly Trend Points (past 6 time slots)

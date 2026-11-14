@@ -14,6 +14,11 @@ class MetricSummary(BaseModel):
     actions_pending_approval: int
     contained_threats: int
     verification_failures: int
+    unique_correlated_incidents: int = 0
+    correlation_matches: int = 0
+    correlation_attempts: int = 0
+    active_incidents: int = 0
+    historical_incidents: int = 0
 
 class TrendPoint(BaseModel):
     timestamp: str

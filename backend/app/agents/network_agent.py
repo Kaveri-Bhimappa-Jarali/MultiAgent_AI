@@ -39,7 +39,7 @@ class NetworkMonitoringAgent(BaseAgent):
 
             # Supervised ML Flow Inference on flow attributes
             flow_feats = extract_flow_features_from_event(e)
-            if flow_feats and len(flow_feats) > 0:
+            if flow_feats and len(flow_feats) >= 3 and e.severity != "INFO":
                 ml_res = run_realtime_flow_inference(flow_feats)
                 if ml_res.get("ml_evaluated") and ml_res.get("is_malicious") and ml_res.get("attack_probability", 0) >= 0.60:
                     ml_detections.append((e, ml_res))

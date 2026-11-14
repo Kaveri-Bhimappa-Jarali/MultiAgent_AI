@@ -119,11 +119,18 @@ def ingest_vm_telemetry(
     events_to_ingest: List[SecurityEventCreate] = []
 
     for item in raw_records:
+        # Normalize timestamp to UTC
+        raw_ts = item.get("timestamp")
+        norm_ts = ensure_utc(raw_ts) if raw_ts else now
+
+        # Normalize host to actual machine identifier
+        host_val = item.get("host") or item.get("hostname") or (node.vm_id if node else "VM-GUEST")
+
         sec_evt = SecurityEventCreate(
             event_id=item.get("event_id") or f"EVT-VM-{uuid.uuid4().hex[:8].upper()}",
             event_type=item.get("event_type", "authentication"),
             severity=item.get("severity", "INFO"),
-            timestamp=item.get("timestamp") or now,
+            timestamp=norm_ts,
             source_type=source_type,
             source_identifier=f"{vm_id}:{item.get('collector_source', 'guest-agent')}",
             source_ip=item.get("source_ip"),
@@ -132,7 +139,7 @@ def ingest_vm_telemetry(
             destination_port=item.get("destination_port"),
             protocol=item.get("protocol", "TCP"),
             username=item.get("username"),
-            host=item.get("host") or (node.name if node else "VM-GUEST"),
+            host=host_val,
             process_name=item.get("process_name"),
             command_line=item.get("command_line"),
             file_path=item.get("file_path"),

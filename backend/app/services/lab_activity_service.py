@@ -20,9 +20,10 @@ def get_lab_activity(db: Session, minutes: int = 60, now: datetime = None):
     nodes = []
     for vm_id, (label, public_ip, private_ip) in topology.items():
         node = live_nodes.get(vm_id, {})
+        effective_ip = node.get('ip_address') or private_ip
         nodes.append({
             'vm_id': vm_id, 'label': label, 'public_ip': public_ip,
-            'private_ip': private_ip, 'status': node.get('status', 'CONFIGURED'),
+            'private_ip': effective_ip, 'status': node.get('status', 'CONFIGURED'),
             'last_heartbeat_at': node.get('last_heartbeat_at'),
             'last_telemetry_at': node.get('last_telemetry_at'),
             'total_events': node.get('events_count', 0),

@@ -1,3 +1,4 @@
+from app.config import settings
 from fastapi import APIRouter, Depends, HTTPException, Body, Header
 from sqlalchemy.orm import Session
 from typing import Dict, Any, List, Optional
@@ -186,7 +187,7 @@ def create_vm_action(
         action_type = "ISOLATE_ENDPOINT"
         command_to_run = (
             "iptables -I INPUT -i lo -j ACCEPT; "
-            "iptables -I INPUT -s 192.168.56.1 -j ACCEPT; "
+            f"iptables -I INPUT -s {settings.SOC_HOST_IP} -j ACCEPT; "
             "iptables -P INPUT DROP; iptables -P FORWARD DROP"
         )
     elif action_type == "DISABLE_USER":
@@ -356,4 +357,57 @@ def run_vm_scenario(
         "scenario": scenario,
         "message": f"Attacker VM ({attacker_ip}) initiated controlled {scenario} against {target_ip}. Forwarded {len(raw_events)} telemetry events to real-time SOC pipeline.",
         "ingestion_result": res
+    }
+
+@router.post("/nodes/register")
+def register_or_update_node(
+    payload: Dict[str, Any] = Body(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Allows registering or updating a VM node's IP address, role, and API key.
+    Enables plug-and-play compatibility with any custom subnet.
+    """
+    vm_id = payload.get("vm_id")
+    if not vm_id:
+        raise HTTPException(status_code=400, detail="vm_id is required")
+    
+    node = db.query(VMNode).filter(VMNode.vm_id == vm_id).first()
+    if not node:
+        node = VMNode(
+            vm_id=vm_id,
+            name=payload.get("name", f"Lab Node ({vm_id})"),
+            role=payload.get("role", "SERVER"),
+            ip_address=payload.get("ip_address", "192.168.56.15"),
+            os_info=payload.get("os_info", "Linux 64-bit"),
+            status="CONFIGURED",
+            active_collectors=payload.get("active_collectors", ["auth_log", "socket_monitor"]),
+            api_key=payload.get("api_key", f"VM-KEY-{vm_id.upper()}-2026"),
+            created_at=datetime.now(timezone.utc)
+        )
+        db.add(node)
+    else:
+        if payload.get("ip_address"):
+            node.ip_address = payload["ip_address"]
+        if payload.get("role"):
+            node.role = payload["role"]
+        if payload.get("api_key"):
+            node.api_key = payload["api_key"]
+        if payload.get("name"):
+            node.name = payload["name"]
+        if payload.get("status"):
+            node.status = payload["status"]
+            
+    db.commit()
+    db.refresh(node)
+    return {
+        "status": "REGISTERED",
+        "node": {
+            "vm_id": node.vm_id,
+            "name": node.name,
+            "role": node.role,
+            "ip_address": node.ip_address,
+            "api_key": node.api_key,
+            "status": node.status
+        }
     }

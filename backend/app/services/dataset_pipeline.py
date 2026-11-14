@@ -173,11 +173,15 @@ def extract_flow_features_from_event(event: Any) -> Optional[Dict[str, Any]]:
     if getattr(event, "source_port", None) is not None:
         flow_data["sport"] = float(event.source_port)
 
-    # 3. If event_type is network_connection and flow attributes are present, return dictionary
-    if getattr(event, "event_type", None) == "network_connection" or len(flow_data) >= 3:
+    # 3. Flow inference requires actual multi-dimensional flow metrics (e.g. sbytes, dbytes, dur, rate)
+    # A standalone destination_port without flow metrics must not trigger flow classifier
+    flow_metric_keys = {"sbytes", "dbytes", "dur", "rate", "spkts", "dpkts", "sttl", "dttl", "sload", "dload"}
+    has_flow_metrics = any(k in flow_data for k in flow_metric_keys)
+
+    if has_flow_metrics or len(flow_data) >= 4:
         return flow_data
 
-    return flow_data if len(flow_data) > 0 else None
+    return None
 
 def run_realtime_flow_inference(flow_dict: Dict[str, Any]) -> Dict[str, Any]:
     """
