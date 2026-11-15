@@ -380,17 +380,24 @@ class CorrelationAgent(BaseAgent):
                     highest_rank = rank
                     max_sev = f.severity.upper()
 
+            # Extract distinct attack stages / categories across cluster findings
+            cluster_categories = [_extract_attack_category(f) for f in cluster_findings]
+            unique_categories = list(dict.fromkeys(cluster_categories))
+
             # ELIGIBILITY CHECK FOR NEW INCIDENTS:
             # An incident is created when:
             # 1. At least 2 findings with valid provenance
             # 2. At least 2 distinct source events
-            # 3. Cross-agent corroboration (>= 2 distinct specialized agents), multi-finding high-severity pattern (rank >= 3),
-            #    or sustained medium-severity activity across >= 3 distinct events
+            # 3. Multi-stage attack progression (>= 2 distinct attack categories/vectors, e.g. SSH login + Exfil, Port scan + Web burst),
+            #    cross-agent corroboration (>= 2 distinct specialized agents), multi-finding high-severity pattern (rank >= 3),
+            #    or sustained medium-severity activity across >= 3 distinct events on the target machine.
+            # 4. Note: A single isolated attack vector probe (e.g. only SSH invalid logins) remains uncorrelated awaiting secondary corroboration.
             if target_incident is None:
                 has_valid_findings = len(findings_with_provenance) >= 2
                 has_enough_events = len(distinct_source_events) >= 2
                 has_corroboration = (
-                    (len(participating_agents) >= 2)
+                    (len(unique_categories) >= 2)
+                    or (len(participating_agents) >= 2)
                     or (highest_rank >= 3)
                     or (highest_rank >= 2 and len(distinct_source_events) >= 3)
                     or (len(cluster_hosts) >= 1 and len(findings_with_provenance) >= 2)
@@ -404,9 +411,9 @@ class CorrelationAgent(BaseAgent):
                             self.db.commit()
                     self.log(
                         "INFO",
-                        f"Cluster '{pivot_entity}' remains uncorrelated: insufficient corroboration "
+                        f"Cluster '{pivot_entity}' remains uncorrelated: single attack vector probe awaiting secondary corroboration "
                         f"({len(findings_with_provenance)} finding(s), {len(distinct_source_events)} event(s), "
-                        f"{len(participating_agents)} agent(s))."
+                        f"{len(participating_agents)} agent(s), categories: {unique_categories})."
                     )
                     continue
 
@@ -557,10 +564,19 @@ class CorrelationAgent(BaseAgent):
                 if new_events_introduced:
                     target_incident.finding_count = max(target_incident.finding_count or 0, total_db_findings)
 
+                stage_labels = [_format_stage_label(c) for c in unique_categories if c != "GENERIC_DETECTION"]
+                target_label = next(iter(cluster_hosts), None) or next(iter(cluster_dest_ips), None) or pivot_entity
+                if len(stage_labels) >= 2:
+                    target_incident.title = f"Correlated Multi-Stage Campaign on {target_label}: {' -> '.join(stage_labels[:3])}"
+
                 merged_reasons = list(target_incident.correlation_reasons or [])
                 for r in correlation_reasons:
                     if r not in merged_reasons:
                         merged_reasons.append(r)
+                if len(stage_labels) >= 2:
+                    prog_reason = f"Multi-stage attack progression observed: {' -> '.join(stage_labels[:3])}"
+                    if prog_reason not in merged_reasons:
+                        merged_reasons.append(prog_reason)
                 target_incident.correlation_reasons = merged_reasons
                 target_incident.updated_at = now
 
@@ -584,23 +600,31 @@ class CorrelationAgent(BaseAgent):
                 # =========================================================
                 inc_id = f"INC-{now.strftime('%Y%m')}-{uuid.uuid4().hex[:6].upper()}"
 
-                if "Authentication Agent" in participating_agents and "Endpoint Agent" in participating_agents:
-                    title = f"Multi-Stage Account Compromise & Endpoint Execution ({pivot_entity})"
+                stage_labels = [_format_stage_label(c) for c in unique_categories if c != "GENERIC_DETECTION"]
+                target_label = next(iter(cluster_hosts), None) or next(iter(cluster_dest_ips), None) or pivot_entity
+
+                if len(stage_labels) >= 2:
+                    title = f"Correlated Multi-Stage Campaign on {target_label}: {' -> '.join(stage_labels[:3])}"
+                elif "Authentication Agent" in participating_agents and "Endpoint Agent" in participating_agents:
+                    title = f"Multi-Stage Account Compromise & Endpoint Execution ({target_label})"
+                elif "Network Monitoring Agent" in participating_agents and "Anomaly Detection Agent" in participating_agents:
+                    title = f"Correlated Network Reconnaissance & Port Sweep ({target_label})"
                 elif "Network Monitoring Agent" in participating_agents and "Threat Intelligence Agent" in participating_agents:
-                    title = f"Correlated Network Intrusion & Threat Intel Match ({pivot_entity})"
+                    title = f"Correlated Network Intrusion & Threat Intel Match ({target_label})"
                 elif "Network Monitoring Agent" in participating_agents and "Endpoint Agent" in participating_agents:
-                    title = f"Network Ingress Followed by Host Execution ({pivot_entity})"
+                    title = f"Network Ingress Followed by Host Execution ({target_label})"
                 elif "Authentication Agent" in participating_agents and "Threat Intelligence Agent" in participating_agents:
-                    title = f"Credential Attack from Known Malicious Indicator ({pivot_entity})"
+                    title = f"Credential Attack from Known Malicious Indicator ({target_label})"
                 elif "Authentication Agent" in participating_agents:
-                    title = f"SSH / Credential Brute Force Attack ({pivot_entity})"
+                    title = f"SSH / Credential Brute Force Attack ({target_label})"
                 elif "Network Monitoring Agent" in participating_agents:
-                    title = f"Network Reconnaissance & Port Scan ({pivot_entity})"
+                    title = f"Network Reconnaissance & Port Scan ({target_label})"
                 elif "Endpoint Agent" in participating_agents:
-                    title = f"Host Compromise & Malicious Process Execution ({pivot_entity})"
+                    title = f"Host Compromise & Malicious Process Execution ({target_label})"
                 elif len(participating_agents) >= 2:
-                    title = f"Multi-Agent Correlated Threat Sequence ({pivot_entity})"
+                    title = f"Multi-Agent Correlated Threat Sequence ({target_label})"
                 else:
+                    title = f"Multi-Finding Correlated Detection ({target_label})"
                     title = f"Multi-Finding Correlated Detection ({pivot_entity})"
 
                 base_risk = 75 if max_sev == "CRITICAL" else (60 if max_sev == "HIGH" else 45)
