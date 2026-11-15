@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useLocation } from 'react-router-dom'
-import { correlatedIncidents as defaultIncidents } from '../data/mockSecurityData'
 import { LLMAnalysis } from '../components/ai/LLMAnalysis'
 import { SeverityCard } from '../components/ai/SeverityCard'
 import { RecommendedActions } from '../components/ai/RecommendedActions'
@@ -16,32 +15,49 @@ export function AIAnalysis() {
   const [selectedIncidentId, setSelectedIncidentId] = useState(initialId)
   const [isBackendLoaded, setIsBackendLoaded] = useState(false)
 
-  useEffect(() => {
-    let isMounted = true
-    async function loadBackendIncidents() {
-      try {
-        const rawList = await api.getIncidents()
-        if (isMounted && Array.isArray(rawList) && rawList.length > 0) {
-          const mapped = rawList.map(mapBackendIncident).filter(Boolean)
-          if (mapped.length > 0) {
-            setIncidents(mapped)
-            setIsBackendLoaded(true)
-            if (!location.state?.incidentId) {
-              setSelectedIncidentId(mapped[0].id)
-            }
-          }
-        }
-      } catch (err) {
-        console.info('[AIAnalysis] Using simulated model data fallback:', err.message)
-        if (isMounted) {
-          setIncidents(defaultIncidents)
-          setSelectedIncidentId(defaultIncidents[0]?.id)
+  const loadBackendIncidents = useCallback(async () => {
+    try {
+      const rawList = await api.getIncidents()
+      if (Array.isArray(rawList)) {
+        const mapped = rawList.map(mapBackendIncident).filter(Boolean)
+        setIncidents(mapped)
+        setIsBackendLoaded(true)
+        if (mapped.length > 0) {
+          setSelectedIncidentId(prev => {
+            if (prev && mapped.some(m => m.id === prev)) return prev
+            return mapped[0].id
+          })
+        } else {
+          setSelectedIncidentId(null)
         }
       }
+    } catch (err) {
+      console.warn('[AIAnalysis] Failed to fetch incidents from backend:', err.message)
+      setIncidents([])
+      setSelectedIncidentId(null)
     }
+  }, [])
+
+  useEffect(() => {
     loadBackendIncidents()
-    return () => { isMounted = false }
-  }, [location.state?.incidentId])
+    const interval = setInterval(loadBackendIncidents, 10000)
+
+    const ws = api.connectWebSocket((msg) => {
+      if (msg && typeof msg === 'object') {
+        const eventType = msg.type || msg.event
+        if (['INCIDENT_CREATED', 'INCIDENT_UPDATED', 'LLM_ANALYSIS_COMPLETED'].includes(eventType)) {
+          loadBackendIncidents()
+        }
+      }
+    })
+
+    return () => {
+      clearInterval(interval)
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.close()
+      }
+    }
+  }, [loadBackendIncidents])
 
   const currentIncident =
     incidents.find(inc => inc.id === selectedIncidentId) ||
@@ -73,30 +89,44 @@ export function AIAnalysis() {
         </div>
 
         {/* Incident Switcher */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-400 font-semibold hidden sm:inline">Active Incident:</span>
-          <select
-            value={selectedIncidentId}
-            onChange={(e) => setSelectedIncidentId(e.target.value)}
-            className="bg-[#0d121c] border border-[#1e2736] text-purple-300 text-xs rounded-xl px-3 py-1.5 font-mono focus:outline-none focus:border-purple-500 font-bold"
-          >
-            {incidents.map(inc => (
-              <option key={inc.id} value={inc.id}>
-                {inc.id} ({inc.severity}) — {inc.title.slice(0, 36)}...
-              </option>
-            ))}
-          </select>
-        </div>
+        {incidents.length > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400 font-semibold hidden sm:inline">Active Incident:</span>
+            <select
+              value={selectedIncidentId || ''}
+              onChange={(e) => setSelectedIncidentId(e.target.value)}
+              className="bg-[#0d121c] border border-[#1e2736] text-purple-300 text-xs rounded-xl px-3 py-1.5 font-mono focus:outline-none focus:border-purple-500 font-bold"
+            >
+              {incidents.map(inc => (
+                <option key={inc.id} value={inc.id}>
+                  {inc.id} ({inc.severity}) — {inc.title.slice(0, 36)}...
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
-      {/* 1. LLM Analysis: Input -> Observation -> Conclusion */}
-      <LLMAnalysis incident={currentIncident} />
+      {incidents.length === 0 || !currentIncident ? (
+        <div className="rounded-2xl p-12 bg-[#0d121c] border border-[#1e2736] text-center text-slate-500 font-mono text-xs space-y-3">
+          <BrainCircuit className="w-10 h-10 text-slate-600 mx-auto" />
+          <p className="font-semibold text-slate-300 text-sm">No Active Incidents for AI Reasoning</p>
+          <p className="text-slate-500 max-w-md mx-auto">
+            The Multi-Agent AI system performs root cause analysis and MITRE mapping once telemetry events are correlated into security incidents.
+          </p>
+        </div>
+      ) : (
+        <>
+          {/* 1. LLM Analysis: Input -> Observation -> Conclusion */}
+          <LLMAnalysis incident={currentIncident} />
 
-      {/* 2. Severity Classification & Risk Score */}
-      <SeverityCard incident={currentIncident} />
+          {/* 2. Severity Classification & Risk Score */}
+          <SeverityCard incident={currentIncident} />
 
-      {/* 3. Recommended Actions & Response Decision Engine */}
-      <RecommendedActions incident={currentIncident} />
+          {/* 3. Recommended Actions & Response Decision Engine */}
+          <RecommendedActions incident={currentIncident} />
+        </>
+      )}
     </div>
   )
 }

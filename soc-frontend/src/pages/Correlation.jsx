@@ -41,7 +41,23 @@ export function Correlation() {
     }
     refresh()
     const interval = setInterval(() => { if (!document.hidden) refresh() }, 10000)
-    return () => { active = false; clearInterval(interval) }
+
+    const ws = api.connectWebSocket((msg) => {
+      if (msg && typeof msg === 'object') {
+        const eventType = msg.type || msg.event
+        if (['INCIDENT_CREATED', 'INCIDENT_UPDATED', 'LLM_ANALYSIS_COMPLETED', 'RESPONSE_ACTION_UPDATED'].includes(eventType)) {
+          refresh()
+        }
+      }
+    })
+
+    return () => {
+      active = false
+      clearInterval(interval)
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.close()
+      }
+    }
   }, [refreshVersion])
 
   useEffect(() => {

@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
-import { correlatedIncidents as defaultIncidents } from '../data/mockSecurityData'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { SearchInput } from '../components/ui/SearchInput'
@@ -27,32 +26,50 @@ export function Incidents() {
   const [expandedId, setExpandedId] = useState(null)
   const [isBackendLoaded, setIsBackendLoaded] = useState(false)
 
+  const loadIncidents = useCallback(async () => {
+    try {
+      const rawList = await api.getIncidents()
+      if (Array.isArray(rawList)) {
+        const mapped = rawList.map(mapBackendIncident).filter(Boolean)
+        setIncidents(mapped)
+        setIsBackendLoaded(true)
+        setSelectedIncident(prev => {
+          if (!prev) return mapped[0] || null
+          return mapped.find(m => m.id === prev.id) || mapped[0] || null
+        })
+        setExpandedId(prev => {
+          if (!prev && mapped[0]) return mapped[0].id
+          return prev
+        })
+      }
+    } catch (err) {
+      console.warn('[Incidents] Failed to load incidents from backend:', err.message)
+      setIncidents([])
+      setSelectedIncident(null)
+      setExpandedId(null)
+    }
+  }, [])
+
   useEffect(() => {
-    let isMounted = true
-    async function loadIncidents() {
-      try {
-        const rawList = await api.getIncidents()
-        if (isMounted && Array.isArray(rawList) && rawList.length > 0) {
-          const mapped = rawList.map(mapBackendIncident).filter(Boolean)
-          if (mapped.length > 0) {
-            setIncidents(mapped)
-            setSelectedIncident(mapped[0])
-            setExpandedId(mapped[0].id)
-            setIsBackendLoaded(true)
-          }
-        }
-      } catch (err) {
-        console.info('[Incidents] Using simulated incidents fallback:', err.message)
-        if (isMounted) {
-          setIncidents(defaultIncidents)
-          setSelectedIncident(defaultIncidents[0])
-          setExpandedId(defaultIncidents[0]?.id)
+    loadIncidents()
+    const interval = setInterval(loadIncidents, 10000)
+
+    const ws = api.connectWebSocket((msg) => {
+      if (msg && typeof msg === 'object') {
+        const eventType = msg.type || msg.event
+        if (['INCIDENT_CREATED', 'INCIDENT_UPDATED', 'RESPONSE_ACTION_UPDATED', 'LLM_ANALYSIS_COMPLETED'].includes(eventType)) {
+          loadIncidents()
         }
       }
+    })
+
+    return () => {
+      clearInterval(interval)
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.close()
+      }
     }
-    loadIncidents()
-    return () => { isMounted = false }
-  }, [])
+  }, [loadIncidents])
 
   const filtered = incidents.filter(inc =>
     String(inc.id || '').toLowerCase().includes(search.toLowerCase()) ||

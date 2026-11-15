@@ -56,7 +56,8 @@ const DECISION_CARDS = [
 ]
 
 export function RecommendedActions({ incident }) {
-  const currentSeverity = (incident?.severity || 'VERY HIGH').toUpperCase()
+  if (!incident) return null
+  const currentSeverity = (incident?.severity || 'MEDIUM').toUpperCase()
   const [executedAction, setExecutedAction] = useState(null)
   const [statusMessage, setStatusMessage] = useState('')
   const [isExecuting, setIsExecuting] = useState(false)

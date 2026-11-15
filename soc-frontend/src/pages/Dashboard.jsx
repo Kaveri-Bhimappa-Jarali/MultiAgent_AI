@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { miniSparklines } from '../data/mockSecurityData'
 import { useLiveEvents } from '../hooks/useLiveEvents'
 import { MetricCard } from '../components/dashboard/MetricCard'
 import { SecurityWorkflow } from '../components/dashboard/SecurityWorkflow'
@@ -33,6 +32,12 @@ export function Dashboard() {
   const [lastUpdated, setLastUpdated] = useState('Just Now')
   const [viewMode, setViewMode] = useState('pipeline')
 
+  const sparklineData = useMemo(() => {
+    return Array.isArray(trends) && trends.length > 0
+      ? trends.map(t => ({ v: t.count ?? t.events ?? 0 }))
+      : []
+  }, [trends])
+
   const loadBackendDashboard = useCallback(async () => {
     try {
       // Fetch dashboard summary + agent status (for total findings count) in parallel
@@ -58,8 +63,8 @@ export function Dashboard() {
       const incidentList = Array.isArray(allIncidents) ? allIncidents : []
       const totalIncidents = incidentList.length
 
-      // Correlated events = number of incidents (each incident = correlation cluster)
-      const correlatedCount = totalIncidents
+      // Correlated events = total count of events clustered into incidents
+      const correlatedEventCount = incidentList.reduce((sum, i) => sum + (i.event_count || 0), 0)
 
       // Active threats = open (non-contained) incidents
       const openCount = m.open_incidents ?? incidentList.filter(i => i.status !== 'CONTAINED').length
@@ -78,7 +83,7 @@ export function Dashboard() {
 
       setMetrics({
         eventsReceived:    { value: totalEvents.toLocaleString(),  label: 'Events Received',    sub: 'Real-time security feed',          trend: '',                  color: '#8b5cf6' },
-        correlatedEvents:  { value: correlatedCount.toString(),     label: 'Correlated Events',  sub: 'Correlation Engine Active',         trend: `${totalIncidents} Incidents`, color: '#06b6d4' },
+        correlatedEvents:  { value: correlatedEventCount.toLocaleString(), label: 'Correlated Events',  sub: 'Correlation Engine Active',         trend: `${totalIncidents} Incident${totalIncidents === 1 ? '' : 's'}`, color: '#06b6d4' },
         activeThreats:     { value: openCount.toString(),           label: 'Active Threats',     sub: `${critCount} High Risk`,           trend: '',                  color: '#f97316' },
         criticalIncidents: { value: critCount.toString(),           label: 'Critical Incidents', sub: 'Needs Immediate Attention',         trend: `${m.contained_threats ?? 0} Contained`, color: '#ef4444' },
         aiAnalyses:        { value: aiCount.toString(),             label: 'AI Analyses',        sub: 'Multi-Agent Pipeline',             trend: 'Live',              color: '#d946ef' },
@@ -88,7 +93,7 @@ export function Dashboard() {
       // Build workflow pipeline stages from real data
       setWorkflowData([
         { id: 'events',      label: 'Events Received',       icon: '📥', count: totalEvents.toLocaleString(),   status: 'Active Ingest',   desc: 'Normalized Syslog, WAF & EDR streams' },
-        { id: 'correlation', label: 'Correlation Engine',    icon: '🔗', count: correlatedCount.toString(),      status: 'Correlating',     desc: 'Graph clustering & multi-event chains' },
+        { id: 'correlation', label: 'Correlation Engine',    icon: '🔗', count: correlatedEventCount.toLocaleString(), status: 'Correlating',     desc: 'Graph clustering & multi-event chains' },
         { id: 'llm',         label: 'LLM Analysis',          icon: '🧠', count: aiCount.toString(),              status: 'Reasoning',       desc: 'Observation synthesis & threat diagnosis' },
         { id: 'severity',    label: 'Severity Classification',icon: '⚠️', count: `${critCount} Critical`,        status: `Scored (${Math.round(m.avg_risk_score || 70)}/100)`, desc: 'Multi-factor risk & impact scoring' },
         { id: 'action',      label: 'Response Decision',     icon: '⚡', count: '4 Tiers',                       status: 'Automated / Human', desc: 'Allow • Monitor • Investigate • Block' },
@@ -208,7 +213,7 @@ export function Dashboard() {
               subtitle={metrics.eventsReceived.sub}
               trend={metrics.eventsReceived.trend}
               color="#8b5cf6"
-              chartData={miniSparklines.events}
+              chartData={sparklineData}
             />
             <MetricCard
               emoji="🔗"
@@ -217,7 +222,7 @@ export function Dashboard() {
               subtitle={metrics.correlatedEvents.sub}
               trend={metrics.correlatedEvents.trend}
               color="#06b6d4"
-              chartData={miniSparklines.correlated}
+              chartData={sparklineData}
             />
             <MetricCard
               emoji="🚨"
@@ -226,7 +231,7 @@ export function Dashboard() {
               subtitle={metrics.activeThreats.sub}
               trend={metrics.activeThreats.trend}
               color="#f97316"
-              chartData={miniSparklines.threats}
+              chartData={sparklineData}
             />
             <MetricCard
               emoji="🔴"
@@ -235,7 +240,7 @@ export function Dashboard() {
               subtitle={metrics.criticalIncidents.sub}
               trend={metrics.criticalIncidents.trend}
               color="#ef4444"
-              chartData={miniSparklines.critical}
+              chartData={sparklineData}
             />
             <MetricCard
               emoji="🧠"
@@ -244,7 +249,7 @@ export function Dashboard() {
               subtitle={metrics.aiAnalyses.sub}
               trend={metrics.aiAnalyses.trend}
               color="#d946ef"
-              chartData={miniSparklines.ai}
+              chartData={sparklineData}
             />
           </div>
 

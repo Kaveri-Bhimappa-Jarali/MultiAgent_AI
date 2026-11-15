@@ -10,8 +10,9 @@ const SEVERITY_LEVELS = [
 ]
 
 export function SeverityCard({ incident }) {
-  const currentSeverity = (incident?.severity || 'VERY HIGH').toUpperCase()
-  const riskScore = incident?.riskScore || 87
+  if (!incident) return null
+  const currentSeverity = (incident?.severity || 'MEDIUM').toUpperCase()
+  const riskScore = incident?.riskScore ?? 50
 
   // Calculate filled segments for score
   const totalSegments = 24

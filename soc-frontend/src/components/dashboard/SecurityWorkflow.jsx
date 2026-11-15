@@ -1,13 +1,20 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { workflowStages as defaultWorkflowStages } from '../../data/mockSecurityData'
 import { ArrowRight, ChevronRight, Activity, Zap } from 'lucide-react'
+
+const initialStages = [
+  { id: 'events', label: 'Events Received', icon: '📥', count: '0', status: 'Active Ingest', desc: 'Normalized Syslog, WAF & EDR streams' },
+  { id: 'correlation', label: 'Correlation Engine', icon: '🔗', count: '0', status: 'Correlating', desc: 'Graph clustering & multi-event chains' },
+  { id: 'llm', label: 'LLM Analysis', icon: '🧠', count: '0', status: 'Reasoning', desc: 'Observation synthesis & threat diagnosis' },
+  { id: 'severity', label: 'Severity Classification', icon: '⚠️', count: '0 Critical', status: 'Evaluating', desc: 'Multi-factor risk & impact scoring' },
+  { id: 'action', label: 'Response Decision', icon: '⚡', count: '4 Tiers', status: 'SOAR Ready', desc: 'Allow • Monitor • Investigate • Block' },
+]
 
 export function SecurityWorkflow({ stages = null, activeStep = null, onSelectStep = null }) {
   const navigate = useNavigate()
-  // Use real stages from prop when available, otherwise fall back to static mock shapes
-  const workflowStages = stages || defaultWorkflowStages
+  // Use real stages from prop when available, otherwise fall back to clean empty stage structure
+  const workflowStages = stages || initialStages
 
   const handleStepClick = (stage) => {
     if (onSelectStep) {
