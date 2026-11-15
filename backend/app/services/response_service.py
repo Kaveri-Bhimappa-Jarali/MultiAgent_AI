@@ -134,12 +134,17 @@ def execute_response_action(db: Session, action_id: str, actor: str, dry_run: Op
         except ValueError as exc:
             raise HTTPException(status_code=400, detail="BLOCK_IP requires a valid IP address") from exc
         gateways = db.query(VMNode).filter(VMNode.role == "GATEWAY").all()
-        if len(gateways) != 1:
-            raise HTTPException(
-                status_code=409,
-                detail="A single explicitly configured GATEWAY node is required for real IP blocking",
-            )
-        target_node = gateways[0]
+        if len(gateways) == 1:
+            target_node = gateways[0]
+        else:
+            # Fallback for Two-VM laboratory topology:
+            # Apply the IP block firewall rule directly on the monitored Victim ENDPOINT node
+            target_node = db.query(VMNode).filter(VMNode.role.in_(["ENDPOINT", "SERVER"])).first()
+            if not target_node:
+                raise HTTPException(
+                    status_code=409,
+                    detail="No active GATEWAY or ENDPOINT VM node is available for IP blocking",
+                )
         firewall = "ip6tables" if parsed_ip.version == 6 else "iptables"
         command_to_run = f"{firewall} -I INPUT -s {parsed_ip} -j DROP"
     elif action.action_type == "DISABLE_USER":
@@ -238,6 +243,20 @@ def rollback_response_action(db: Session, action_id: str, actor: str) -> Respons
     }
 
     action.status = "ROLLED_BACK"
+    if rollback_cmd:
+        target_node = db.query(VMNode).filter(VMNode.role.in_(["ENDPOINT", "SERVER", "GATEWAY"])).first()
+        if target_node:
+            vm_act = VMAction(
+                action_id=f"VMACT-ROLLBACK-{uuid.uuid4().hex[:6].upper()}",
+                incident_id=action.incident_id,
+                vm_id=target_node.vm_id,
+                action_type=f"ROLLBACK_{action.action_type}",
+                target_value=action.target_value,
+                command_to_run=rollback_cmd,
+                status="PENDING_VM_PULL",
+                created_at=datetime.now(timezone.utc),
+            )
+            db.add(vm_act)
     db.commit()
 
     log_audit_entry(

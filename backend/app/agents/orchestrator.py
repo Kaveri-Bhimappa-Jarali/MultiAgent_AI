@@ -300,7 +300,6 @@ class MultiAgentSOCEngine:
             corr_context["window_seconds"] = 900
             corr_res = corr_agent.execute(corr_context)
             agent_results.append(corr_res)
-            agent_results.append(corr_res)
 
             data = corr_res.get("data", {})
             created_inc_ids = data.get("incidents_created", [])
