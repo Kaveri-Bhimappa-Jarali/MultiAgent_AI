@@ -4,6 +4,7 @@ import json
 import os
 import re
 import shlex
+import subprocess
 import time
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -157,15 +158,21 @@ class SimulationService:
             remote_command
         ]
 
-    async def _ssh_output(self, command: List[str], timeout: float = 10):
-        proc = await asyncio.create_subprocess_exec(*command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    async def _ssh_output(self, command: List[str], timeout: float = 25):
         try:
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-            return proc.returncode, stdout.decode(), stderr.decode()
-        finally:
-            if proc.returncode is None:
-                proc.kill()
-                await proc.wait()
+            proc = await asyncio.create_subprocess_exec(*command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            try:
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+                return proc.returncode, stdout.decode(), stderr.decode()
+            finally:
+                if proc.returncode is None:
+                    proc.kill()
+                    await proc.wait()
+        except NotImplementedError:
+            def _run():
+                res = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout)
+                return res.returncode, res.stdout.decode(errors="replace"), res.stderr.decode(errors="replace")
+            return await asyncio.to_thread(_run)
 
     async def check_connectivity(self) -> SimulationConnectivityStatus:
         # One SSH connection per VM, checked concurrently. Probe the actual HTTP route.
@@ -435,28 +442,49 @@ sys.exit(0 if sent else 1)
             append_log(f"Connecting to Attacker VM ({settings.ATTACKER_VM_HOST})...")
             cmd = self._build_ssh_cmd(remote_script)
 
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT
-            )
-            self._active_processes[execution_id] = proc
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.STDOUT
+                )
+                self._active_processes[execution_id] = proc
 
-            timeout = settings.ATTACK_SIMULATION_TIMEOUT
-            t0 = time.perf_counter()
+                timeout = settings.ATTACK_SIMULATION_TIMEOUT
+                t0 = time.perf_counter()
 
-            # Apply the deadline to output reading too; silent children must not run forever.
-            async with asyncio.timeout(timeout):
-                while True:
-                    line = await proc.stdout.readline()
-                    if not line:
-                        break
-                    decoded = line.decode(errors="replace").strip()
-                    if decoded:
-                        append_log(decoded)
-                await proc.wait()
-            dur = time.perf_counter() - t0
-            exit_code = proc.returncode
+                # Apply the deadline to output reading too; silent children must not run forever.
+                async with asyncio.timeout(timeout):
+                    while True:
+                        line = await proc.stdout.readline()
+                        if not line:
+                            break
+                        decoded = line.decode(errors="replace").strip()
+                        if decoded:
+                            append_log(decoded)
+                    await proc.wait()
+                dur = time.perf_counter() - t0
+                exit_code = proc.returncode
+            except NotImplementedError:
+                t0 = time.perf_counter()
+                def _run_sync():
+                    proc = subprocess.Popen(
+                        cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                        bufsize=1
+                    )
+                    self._active_processes[execution_id] = proc
+                    if proc.stdout:
+                        for line in proc.stdout:
+                            s = line.strip()
+                            if s:
+                                append_log(s)
+                    proc.wait(timeout=settings.ATTACK_SIMULATION_TIMEOUT)
+                    return proc.returncode
+                exit_code = await asyncio.to_thread(_run_sync)
+                dur = time.perf_counter() - t0
 
             exec_rec = db.query(AttackSimulationExecution).filter(
                 AttackSimulationExecution.execution_id == execution_id
