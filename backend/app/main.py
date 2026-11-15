@@ -1,3 +1,12 @@
+import sys
+import asyncio
+
+if sys.platform == "win32":
+    try:
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+    except Exception:
+        pass
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -28,13 +37,19 @@ from app.api.health_monitor import router as health_monitor_router
 from app.api.virtual_lab import router as vm_router
 from app.api.simulation import router as simulation_router
 from app.services.vm_service import seed_default_vm_nodes
-from app.services.database_migrations import ensure_event_processed_at_column
+from app.services.database_migrations import (
+    ensure_event_processed_at_column,
+    ensure_incident_event_unique_constraint,
+    recalculate_incident_event_counts,
+)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 1. Startup: Initialize tables and seed initial operational datasets
     Base.metadata.create_all(bind=engine)
     ensure_event_processed_at_column(engine)
+    ensure_incident_event_unique_constraint(engine)
+    recalculate_incident_event_counts(engine)
     db = SessionLocal()
     try:
         seed_default_users(db)

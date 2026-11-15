@@ -1,3 +1,6 @@
+from sqlalchemy.orm import Session
+from app.database import get_db
+from app.services.system_health_service import get_system_and_sources_health
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, Body, HTTPException
 from typing import Dict, Any, List
 from datetime import datetime, timezone
@@ -8,6 +11,12 @@ from app.services.broadcaster import broadcaster
 from app.services.anomaly_model import anomaly_engine
 
 router = APIRouter(prefix="/health", tags=["Monitoring & Collectors Health"])
+
+@router.get("/system-and-sources")
+def get_system_and_sources_health_endpoint(db: Session = Depends(get_db)):
+    """Provides Section 9.14 System and Data Source Health dataset."""
+    return get_system_and_sources_health(db)
+
 
 @router.get("/collectors")
 def get_collectors_health():

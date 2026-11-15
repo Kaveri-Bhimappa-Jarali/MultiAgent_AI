@@ -9,6 +9,16 @@ from app.services.event_queue import event_queue
 from app.services.broadcaster import broadcaster
 from app.services.time_utils import ensure_utc, utc_isoformat
 
+_CUMULATIVE_STATS = {
+    "total_received": 0,
+    "accepted": 0,
+    "duplicates_skipped": 0,
+    "validation_errors": 0,
+}
+
+def get_ingestion_cumulative_stats() -> Dict[str, int]:
+    return dict(_CUMULATIVE_STATS)
+
 def generate_event_id(evt: SecurityEventCreate) -> str:
     if evt.event_id:
         return evt.event_id
@@ -102,6 +112,11 @@ def normalize_and_ingest_events(
     # Automatically queue events for real-time background processing
     if auto_queue and saved_events:
         event_queue.enqueue_events([e.event_id for e in saved_events])
+
+    _CUMULATIVE_STATS["total_received"] += total
+    _CUMULATIVE_STATS["accepted"] += accepted
+    _CUMULATIVE_STATS["duplicates_skipped"] += duplicates
+    _CUMULATIVE_STATS["validation_errors"] += errors
 
     result = IngestionResult(
         total_received=total,

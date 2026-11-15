@@ -6,8 +6,9 @@ from app.models.agent import AgentFinding
 from app.models.event import SecurityEvent
 from app.models.incident import Incident, IncidentEvent, IncidentFinding, IncidentAudit
 from app.services.time_utils import ensure_utc
+from app.config import settings
 
-CORRELATION_WINDOW_SECONDS = 900  # 15 minutes canonical correlation window
+CORRELATION_WINDOW_SECONDS = getattr(settings, "CORRELATION_WINDOW_SECONDS", 900)  # 15 minutes canonical correlation window
 SPECIALIZED_DETECTION_AGENTS = [
     "Network Monitoring Agent",
     "Authentication Agent",
@@ -451,6 +452,30 @@ class CorrelationAgent(BaseAgent):
                         new_state=target_incident.status,
                         timestamp=now
                     ))
+                    # Record Correlation Agent Finding for newly correlated signals
+                    self.record_finding(
+                        title=f"Correlation Enrichment: New Signals for {inc_id}",
+                        severity=target_incident.severity,
+                        confidence=0.95,
+                        description=(
+                            f"Correlated new attack signals into ongoing incident {inc_id} ({pivot_entity}). "
+                            f"Updated incident to {target_incident.event_count} events across "
+                            f"{len(target_incident.participating_agents or [])} participating agents."
+                        ),
+                        evidence={
+                            "incident_id": inc_id,
+                            "pivot_entity": pivot_entity,
+                            "contributing_agents": target_incident.participating_agents or [],
+                            "participating_agents": target_incident.participating_agents or [],
+                            "correlation_reasons": merged_reasons,
+                            "event_ids": list(existing_incident_events)
+                        },
+                        recommendations=[
+                            f"Evaluate escalating threat velocity on incident {inc_id}",
+                            "Confirm automated containment and block enforcement status"
+                        ],
+                        source_event_ids=list(existing_incident_events)
+                    )
 
                 self.db.commit()
                 updated_incidents.append(inc_id)
@@ -514,6 +539,35 @@ class CorrelationAgent(BaseAgent):
                 )
                 self.db.add(new_inc)
                 self.db.commit()
+
+                # Record Correlation Agent Finding for newly established incident
+                self.record_finding(
+                    title=f"Multi-Signal Incident Correlation: {inc_id}",
+                    severity=max_sev,
+                    confidence=conf_avg,
+                    description=(
+                        f"Correlated {len(findings_with_provenance)} distinct findings across "
+                        f"{len(participating_agents)} specialized agent(s) ({', '.join(participating_agents)}) "
+                        f"linked to entity '{pivot_entity}' into new incident {inc_id}."
+                    ),
+                    evidence={
+                        "incident_id": inc_id,
+                        "pivot_entity": pivot_entity,
+                        "affected_hosts": sorted(list(cluster_hosts)),
+                        "affected_ips": sorted(list(cluster_ips)),
+                        "affected_users": sorted(list(cluster_users)),
+                        "cluster_findings": list(cluster_fids),
+                        "contributing_agents": participating_agents,
+                        "participating_agents": participating_agents,
+                        "correlation_reasons": correlation_reasons,
+                        "event_ids": [e.event_id for e in unique_cluster_events]
+                    },
+                    recommendations=[
+                        f"Review consolidated incident dossier for {pivot_entity}",
+                        "Authorize recommended SOAR containment actions"
+                    ],
+                    source_event_ids=[e.event_id for e in unique_cluster_events]
+                )
 
                 # Link findings with valid provenance to incident
                 for f in findings_with_provenance:

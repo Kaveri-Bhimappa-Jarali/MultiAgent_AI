@@ -4,6 +4,7 @@ import json
 import os
 import re
 import shlex
+import subprocess
 import time
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -128,6 +129,7 @@ class SimulationService:
     def __init__(self):
         self._active_tasks: Dict[str, asyncio.Task] = {}
         self._active_processes: Dict[str, asyncio.subprocess.Process] = {}
+        self._active_sync_processes: Dict[str, Any] = {}
         self._lock = asyncio.Lock()
 
     def get_scenarios(self) -> List[SimulationScenario]:
@@ -140,32 +142,55 @@ class SimulationService:
             targets.append(settings.VICTIM_VM_PRIVATE_IP)
         return targets
 
-    def _build_ssh_cmd(self, remote_command: str) -> List[str]:
+    def _build_ssh_cmd(
+        self,
+        remote_command: str,
+        host: Optional[str] = None,
+        port: Optional[int] = None,
+        user: Optional[str] = None,
+        key_path: Optional[str] = None,
+    ) -> List[str]:
+        host = host or settings.ATTACKER_VM_HOST
+        port = port or settings.ATTACKER_VM_SSH_PORT
+        user = user or settings.ATTACKER_VM_USER
+        key_path = key_path or settings.ATTACKER_VM_SSH_KEY_PATH
+
         key_opt = []
-        if settings.ATTACKER_VM_SSH_KEY_PATH and os.path.exists(settings.ATTACKER_VM_SSH_KEY_PATH):
-            key_opt = ["-i", settings.ATTACKER_VM_SSH_KEY_PATH]
+        if key_path and os.path.exists(key_path):
+            key_opt = ["-i", key_path]
 
         return [
             "ssh",
             "-o", "BatchMode=yes",
             "-o", "StrictHostKeyChecking=accept-new",
-            "-o", "ConnectTimeout=6",
+            "-o", "ConnectTimeout=8",
             "-o", "ServerAliveInterval=10",
-            "-p", str(settings.ATTACKER_VM_SSH_PORT),
+            "-p", str(port),
             *key_opt,
-            f"{settings.ATTACKER_VM_USER}@{settings.ATTACKER_VM_HOST}",
-            remote_command
+            f"{user}@{host}",
+            remote_command,
         ]
 
-    async def _ssh_output(self, command: List[str], timeout: float = 10):
-        proc = await asyncio.create_subprocess_exec(*command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    async def _ssh_output(self, command: List[str], timeout: float = 20):
         try:
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-            return proc.returncode, stdout.decode(), stderr.decode()
-        finally:
-            if proc.returncode is None:
-                proc.kill()
-                await proc.wait()
+            proc = await asyncio.create_subprocess_exec(*command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            try:
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+                return proc.returncode, stdout.decode(), stderr.decode()
+            finally:
+                if proc.returncode is None:
+                    proc.kill()
+                    await proc.wait()
+        except NotImplementedError:
+            def _sync_run():
+                try:
+                    res = subprocess.run(command, capture_output=True, text=True, timeout=timeout)
+                    return res.returncode, res.stdout, res.stderr
+                except subprocess.TimeoutExpired:
+                    return -1, "", f"Timeout after {timeout}s"
+                except Exception as e:
+                    return -1, "", str(e)
+            return await asyncio.to_thread(_sync_run)
 
     async def check_connectivity(self) -> SimulationConnectivityStatus:
         # One SSH connection per VM, checked concurrently. Probe the actual HTTP route.
@@ -181,21 +206,36 @@ except OSError:
     pass
 print(json.dumps(result))
 """
-        attacker = VMNodeStatus(name="Attacker VM", host=settings.ATTACKER_VM_HOST,
-            private_ip=settings.ATTACKER_VM_PRIVATE_IP, user=settings.ATTACKER_VM_USER,
-            port=settings.ATTACKER_VM_SSH_PORT, is_reachable=False)
-        victim = VMNodeStatus(name="Victim VM", host=settings.VICTIM_VM_HOST,
-            private_ip=settings.VICTIM_VM_PRIVATE_IP, user=settings.VICTIM_VM_USER,
-            port=settings.VICTIM_VM_SSH_PORT, is_reachable=False)
-        victim_cmd = self._build_ssh_cmd("echo VICTIM_OK")
-        victim_cmd[victim_cmd.index('-p') + 1] = str(settings.VICTIM_VM_SSH_PORT)
-        victim_cmd[-2] = f"{settings.VICTIM_VM_USER}@{settings.VICTIM_VM_HOST}"
+        attacker = VMNodeStatus(
+            name="Attacker VM",
+            host=settings.ATTACKER_VM_HOST,
+            private_ip=settings.ATTACKER_VM_PRIVATE_IP,
+            user=settings.ATTACKER_VM_USER,
+            port=settings.ATTACKER_VM_SSH_PORT,
+            is_reachable=False,
+        )
+        victim = VMNodeStatus(
+            name="Victim VM",
+            host=settings.VICTIM_VM_HOST,
+            private_ip=settings.VICTIM_VM_PRIVATE_IP,
+            user=settings.VICTIM_VM_USER,
+            port=settings.VICTIM_VM_SSH_PORT,
+            is_reachable=False,
+        )
+        attacker_cmd = self._build_ssh_cmd("python3 -u -c " + shlex.quote(probe))
+        victim_cmd = self._build_ssh_cmd(
+            "echo VICTIM_OK",
+            host=settings.VICTIM_VM_HOST,
+            port=settings.VICTIM_VM_SSH_PORT,
+            user=settings.VICTIM_VM_USER,
+            key_path=settings.VICTIM_VM_SSH_KEY_PATH or settings.ATTACKER_VM_SSH_KEY_PATH,
+        )
 
-        async def check(node, command):
+        async def check(node: VMNodeStatus, command: List[str]):
             start = time.perf_counter()
             try:
-                code, out, err = await self._ssh_output(command)
-                node.is_reachable = code == 0
+                code, out, err = await self._ssh_output(command, timeout=20.0)
+                node.is_reachable = (code == 0)
                 node.latency_ms = round((time.perf_counter() - start) * 1000, 1)
                 node.error = None if code == 0 else err.strip() or "SSH failed"
                 return out if code == 0 else ""
@@ -204,7 +244,7 @@ print(json.dumps(result))
                 return ""
 
         attacker_output, _ = await asyncio.gather(
-            check(attacker, self._build_ssh_cmd('python3 -u -c ' + shlex.quote(probe))),
+            check(attacker, attacker_cmd),
             check(victim, victim_cmd),
         )
         try:
@@ -213,19 +253,71 @@ print(json.dumps(result))
             result = {}
         tools = result.get('tools', {name: False for name in ('nmap', 'curl', 'python3', 'nc')})
         route_ready = result.get('http_reachable', False)
+
+        # Check DB heartbeats for nodes as backup verification
+        from app.models.vm_node import VMNode
         db = SessionLocal()
+        victim_hb_ok = False
+        attacker_hb_ok = False
+        active_info = None
         try:
+            now_utc = datetime.now(timezone.utc)
+            def check_hb(node):
+                if not node or not node.last_heartbeat_at:
+                    return False
+                hb = node.last_heartbeat_at
+                if hb.tzinfo is None:
+                    hb = hb.replace(tzinfo=timezone.utc)
+                st = (node.status or "").upper().replace(" ", "_")
+                return (now_utc - hb).total_seconds() < 180 and st in ("ACTIVE", "RECEIVING_TELEMETRY", "CONNECTED")
+
+            v_node = db.query(VMNode).filter(
+                (VMNode.role.in_(["ENDPOINT", "SERVER"])) |
+                (VMNode.ip_address.in_([settings.VICTIM_VM_PRIVATE_IP, settings.VICTIM_VM_HOST]))
+            ).first()
+            a_node = db.query(VMNode).filter(
+                (VMNode.role == "ATTACKER") |
+                (VMNode.ip_address.in_([settings.ATTACKER_VM_PRIVATE_IP, settings.ATTACKER_VM_HOST]))
+            ).first()
+            victim_hb_ok = check_hb(v_node)
+            attacker_hb_ok = check_hb(a_node)
+
             active = db.query(AttackSimulationExecution).filter_by(status="RUNNING").order_by(AttackSimulationExecution.id.desc()).first()
             active_info = {"execution_id": active.execution_id, "scenario_id": active.scenario_id,
                 "scenario_name": active.scenario_name, "target_ip": active.target_ip,
                 "traffic_status": active.traffic_status} if active else None
         finally:
             db.close()
-        return SimulationConnectivityStatus(attacker_vm=attacker, victim_vm=victim,
-            private_network_reachability=route_ready, private_latency_ms=result.get('private_latency_ms'),
-            tools_installed=tools, all_ready=attacker.is_reachable and victim.is_reachable and route_ready and all(tools.values()),
-            max_concurrent=settings.ATTACK_SIMULATION_MAX_CONCURRENT, timeout_seconds=settings.ATTACK_SIMULATION_TIMEOUT,
-            allowed_targets=self._get_allowed_targets(), active_execution=active_info)
+
+        # If route_ready is True, Attacker VM successfully connected to Victim VM over 10.0.0.14:80.
+        # Or if Victim VM is actively sending telemetry/heartbeats to the SOC backend.
+        if route_ready or victim_hb_ok:
+            victim.is_reachable = True
+            victim.error = None
+
+        if attacker_hb_ok and all(tools.values()):
+            attacker.is_reachable = True
+            attacker.error = None
+
+        all_ready = bool(
+            attacker.is_reachable and
+            victim.is_reachable and
+            route_ready and
+            all(tools.values())
+        )
+
+        return SimulationConnectivityStatus(
+            attacker_vm=attacker,
+            victim_vm=victim,
+            private_network_reachability=route_ready,
+            private_latency_ms=result.get('private_latency_ms'),
+            tools_installed=tools,
+            all_ready=all_ready,
+            max_concurrent=settings.ATTACK_SIMULATION_MAX_CONCURRENT,
+            timeout_seconds=settings.ATTACK_SIMULATION_TIMEOUT,
+            allowed_targets=self._get_allowed_targets(),
+            active_execution=active_info,
+        )
 
     def _generate_remote_script(self, scenario_id: str, target_ip: str, params: Dict[str, Any]) -> str:
         """
@@ -256,22 +348,13 @@ print(json.dumps(result))
             attempts = min(max(int(params.get("attempts", 4)), 2), 10)
             return (
                 f"echo '[*] Simulating {attempts} invalid SSH login attempts against {target_ip}:22...'; "
-                f"python3 -u -c \"import socket, time\n"
-                f"users = ['audit_intruder_' + str(i+1) for i in range({attempts})]\n"
-                f"for u in users:\n"
-                f"    print(f'[-] Attempting SSH handshake with invalid user: {{u}}')\n"
-                f"    try:\n"
-                f"        s = socket.socket()\n"
-                f"        s.settimeout(2.5)\n"
-                f"        s.connect(('{target_ip}', 22))\n"
-                f"        s.recv(1024)\n"
-                f"        s.sendall(f'SSH-2.0-OpenSSH_9.0 audit_{{u}}\\r\\n'.encode())\n"
-                f"        time.sleep(0.4)\n"
-                f"        s.close()\n"
-                f"    except Exception as e:\n"
-                f"        print(f'    Connection result: {{e}}')\n"
-                f"    time.sleep(0.6)\n"
-                f"print('[+] Completed invalid user simulation.')\""
+                f"for i in $(seq 1 {attempts}); do "
+                f"  user=\"audit_intruder_$i\"; "
+                f"  echo \"[-] Attempting SSH authentication with invalid user: $user\"; "
+                f"  ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=3 \"$user@{target_ip}\" 2>&1 | true; "
+                f"  sleep 0.5; "
+                f"done; "
+                f"echo '[+] SSH invalid user attempts completed.'"
             )
 
         elif scenario_id == "web_http_burst":
@@ -435,28 +518,55 @@ sys.exit(0 if sent else 1)
             append_log(f"Connecting to Attacker VM ({settings.ATTACKER_VM_HOST})...")
             cmd = self._build_ssh_cmd(remote_script)
 
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT
-            )
-            self._active_processes[execution_id] = proc
-
             timeout = settings.ATTACK_SIMULATION_TIMEOUT
             t0 = time.perf_counter()
 
-            # Apply the deadline to output reading too; silent children must not run forever.
-            async with asyncio.timeout(timeout):
-                while True:
-                    line = await proc.stdout.readline()
-                    if not line:
-                        break
-                    decoded = line.decode(errors="replace").strip()
-                    if decoded:
-                        append_log(decoded)
-                await proc.wait()
-            dur = time.perf_counter() - t0
-            exit_code = proc.returncode
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.STDOUT
+                )
+                self._active_processes[execution_id] = proc
+
+                # Apply the deadline to output reading too; silent children must not run forever.
+                async with asyncio.timeout(timeout):
+                    while True:
+                        line = await proc.stdout.readline()
+                        if not line:
+                            break
+                        decoded = line.decode(errors="replace").strip()
+                        if decoded:
+                            append_log(decoded)
+                    await proc.wait()
+                dur = time.perf_counter() - t0
+                exit_code = proc.returncode
+            except NotImplementedError:
+                # Windows SelectorEventLoop fallback using standard subprocess
+                sync_proc = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1
+                )
+                self._active_sync_processes[execution_id] = sync_proc
+
+                def _stream_sync():
+                    try:
+                        for line in sync_proc.stdout:
+                            decoded = line.strip()
+                            if decoded:
+                                append_log(decoded)
+                        sync_proc.wait(timeout=timeout)
+                    except subprocess.TimeoutExpired:
+                        sync_proc.kill()
+                        sync_proc.wait()
+                        raise TimeoutError("Execution timed out")
+                    return sync_proc.returncode
+
+                exit_code = await asyncio.to_thread(_stream_sync)
+                dur = time.perf_counter() - t0
 
             exec_rec = db.query(AttackSimulationExecution).filter(
                 AttackSimulationExecution.execution_id == execution_id
@@ -535,20 +645,31 @@ sys.exit(0 if sent else 1)
             if proc and proc.returncode is None:
                 proc.kill()
                 await proc.wait()
+            sync_proc = self._active_sync_processes.get(execution_id)
+            if sync_proc and sync_proc.poll() is None:
+                try:
+                    sync_proc.kill()
+                except Exception:
+                    pass
             self._active_tasks.pop(execution_id, None)
             self._active_processes.pop(execution_id, None)
+            self._active_sync_processes.pop(execution_id, None)
             db.close()
 
     def _correlate_soc_pipeline(self, db: Session, exec_rec: AttackSimulationExecution, start_t: datetime, end_t: datetime):
         """Link only authentic traffic from this attacker to this victim and its evidence."""
         from app.services.time_utils import ensure_utc
-        events = db.query(SecurityEvent).filter(
-            SecurityEvent.ingested_at >= ensure_utc(start_t),
-            SecurityEvent.ingested_at <= ensure_utc(end_t),
+        raw_events = db.query(SecurityEvent).filter(
+            SecurityEvent.ingested_at >= ensure_utc(start_t) - timedelta(seconds=2),
+            SecurityEvent.ingested_at <= ensure_utc(end_t) + timedelta(seconds=15),
             SecurityEvent.is_simulated.is_(False),
-            SecurityEvent.source_ip == exec_rec.attacker_ip,
-            SecurityEvent.destination_ip == exec_rec.target_ip,
+            (SecurityEvent.source_ip == exec_rec.attacker_ip) | (SecurityEvent.source_identifier.contains(exec_rec.attacker_ip)),
         ).all()
+        events = [
+            e for e in raw_events
+            if (not e.destination_ip or e.destination_ip == exec_rec.target_ip)
+            or (e.host and "endpoint" in e.host.lower())
+        ]
         event_ids = {event.event_id for event in events}
         exec_rec.associated_event_ids = sorted(event_ids)
         exec_rec.flow_status = "CAPTURED" if event_ids else "PENDING"
@@ -556,13 +677,38 @@ sys.exit(0 if sent else 1)
         exec_rec.ml_status = "INFERRED" if processed else "PENDING"
         findings = db.query(DetectionFinding).filter(DetectionFinding.timestamp >= start_t).all() if event_ids else []
         linked_findings = [finding for finding in findings if event_ids.intersection((finding.evidence or {}).get('event_ids', []))]
-        exec_rec.associated_finding_ids = [finding.finding_id for finding in linked_findings]
-        if any(finding.detection_method in {"ML_CLASSIFICATION", "SUPERVISED_ML", "ANOMALY_DETECTION"} or finding.rule_id == 'RULE-ML-001' for finding in linked_findings):
+        associated_fids = [finding.finding_id for finding in linked_findings]
+
+        from app.models.agent import AgentFinding
+        agent_findings = db.query(AgentFinding).filter(AgentFinding.created_at >= start_t).all() if event_ids else []
+        linked_agent_findings = []
+        for af in agent_findings:
+            src_eids = set(af.source_event_ids or [])
+            if not src_eids and isinstance(af.evidence, dict):
+                src_eids = set(af.evidence.get("event_ids", []) or ([af.evidence.get("event_id")] if af.evidence.get("event_id") else []))
+            if event_ids.intersection(src_eids):
+                linked_agent_findings.append(af)
+                if af.finding_id not in associated_fids:
+                    associated_fids.append(af.finding_id)
+
+        exec_rec.associated_finding_ids = associated_fids
+        if any(finding.detection_method in {"ML_CLASSIFICATION", "SUPERVISED_ML", "ANOMALY_DETECTION"} or finding.rule_id == 'RULE-ML-001' for finding in linked_findings) or any("ML" in af.title or "Anomaly" in af.title for af in linked_agent_findings):
             exec_rec.ml_status = "DETECTED"
+
         incident_link = db.query(IncidentEvent).filter(IncidentEvent.event_id.in_(event_ids)).order_by(IncidentEvent.id.desc()).first() if event_ids else None
+        if not incident_link and linked_agent_findings:
+            for af in linked_agent_findings:
+                if af.incident_id:
+                    incident_link = af
+                    break
+
         exec_rec.associated_incident_id = incident_link.incident_id if incident_link else None
-        exec_rec.soc_alert_status = ("INCIDENT_CREATED" if incident_link else
-            "FINDINGS_RECORDED" if linked_findings else "NO_ALERT" if events and all(event.processing_status == 'PROCESSED' for event in events) else "PENDING")
+        exec_rec.soc_alert_status = (
+            "INCIDENT_CREATED" if incident_link else
+            "FINDINGS_RECORDED" if (linked_findings or linked_agent_findings) else
+            "NO_ALERT" if events and all(event.processing_status == 'PROCESSED' for event in events) else
+            "PENDING"
+        )
         if incident_link:
             from app.models.response import ResponseAction
             action = db.query(ResponseAction).filter_by(incident_id=incident_link.incident_id).order_by(ResponseAction.id.desc()).first()
@@ -600,6 +746,13 @@ sys.exit(0 if sent else 1)
                 await asyncio.sleep(0.5)
                 if proc.returncode is None:
                     proc.kill()
+            except Exception:
+                pass
+        sync_proc = self._active_sync_processes.get(execution_id)
+        if sync_proc:
+            try:
+                sync_proc.terminate()
+                sync_proc.kill()
             except Exception:
                 pass
 

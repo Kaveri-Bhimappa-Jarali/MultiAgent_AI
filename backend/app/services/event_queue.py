@@ -61,15 +61,26 @@ class RealtimeEventQueue:
 
     def recover_pending_events(self, db: Session):
         """
-        Guarantees zero data loss on server restart: Re-enqueues unanalyzed events.
+        Guarantees zero data loss on server restart: Re-enqueues truly unanalyzed events.
+        Only re-queues events that are genuinely PENDING (not yet PROCESSED or ANALYZED),
+        to prevent the Correlation Agent from running again on already-processed events.
         """
         pending = db.query(SecurityEvent).filter(
-            SecurityEvent.processing_status.in_(["PENDING", "PROCESSING"])
+            SecurityEvent.processing_status == "PENDING"
         ).order_by(SecurityEvent.timestamp.asc()).all()
 
         if pending:
-            print(f"[EventQueue] Recovering {len(pending)} unanalyzed pending events from database...")
+            print(f"[EventQueue] Recovering {len(pending)} unanalyzed PENDING events from database...")
             for e in pending:
+                self.enqueue_event(e.event_id)
+        # Note: events with status PROCESSING were interrupted mid-flight;
+        # reset them to PENDING so they are reprocessed cleanly.
+        processing = db.query(SecurityEvent).filter(
+            SecurityEvent.processing_status == "PROCESSING"
+        ).all()
+        if processing:
+            print(f"[EventQueue] Resetting {len(processing)} PROCESSING events to PENDING for reprocessing...")
+            for e in processing:
                 e.processing_status = "PENDING"
                 self.enqueue_event(e.event_id)
             db.commit()
