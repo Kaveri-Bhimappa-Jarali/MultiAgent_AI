@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Float, JSON, ForeignKey, Index
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Float, JSON, ForeignKey, Index, UniqueConstraint
 from datetime import datetime, timezone
 from app.database import Base
 from app.models.event import UTCDateTime
@@ -62,6 +62,7 @@ class IncidentEvent(Base):
 
     __table_args__ = (
         Index("idx_incident_event_seq", "incident_id", "sequence_order"),
+        UniqueConstraint("incident_id", "event_id", name="uq_incident_event"),
     )
 
 class IncidentNote(Base):

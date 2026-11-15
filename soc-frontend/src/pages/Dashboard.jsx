@@ -85,7 +85,7 @@ export function Dashboard() {
         // Build workflow pipeline stages from real data
         setWorkflowData([
           { id: 'events',      label: 'Events Received',       icon: '📥', count: totalEvents.toLocaleString(),   status: 'Active Ingest',   desc: 'Normalized Syslog, WAF & EDR streams' },
-          { id: 'correlation', label: 'Correlation Engine',    icon: '🔗', count: correlatedCount.toString(),      status: 'Correlating',     desc: 'Graph clustering & multi-event chains' },
+          { id: 'correlation', label: 'Correlation Engine',    icon: '🔗', count: uniqueIncidents.toString(),      status: 'Correlating',     desc: 'Graph clustering & multi-event chains' },
           { id: 'llm',         label: 'LLM Analysis',          icon: '🧠', count: aiCount.toString(),              status: 'Reasoning',       desc: 'Observation synthesis & threat diagnosis' },
           { id: 'severity',    label: 'Severity Classification',icon: '⚠️', count: `${critCount} Critical`,        status: `Scored (${Math.round(m.avg_risk_score || 70)}/100)`, desc: 'Multi-factor risk & impact scoring' },
           { id: 'action',      label: 'Response Decision',     icon: '⚡', count: '4 Tiers',                       status: 'Automated / Human', desc: 'Allow • Monitor • Investigate • Block' },

@@ -2,6 +2,7 @@ import uuid
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
+from app.config import settings
 
 from app.models.event import SecurityEvent
 from app.models.incident import Incident
@@ -239,7 +240,7 @@ class MultiAgentSOCEngine:
         # 4. Correlation Agent evaluates persisted findings within the 900s window
         corr_agent = CorrelationAgent(self.db)
         corr_context = dict(shared_context)
-        corr_context["window_seconds"] = 900
+        corr_context["window_seconds"] = getattr(settings, "CORRELATION_WINDOW_SECONDS", 900)
         corr_res = corr_agent.execute(corr_context)
         agent_results.append(corr_res)
 

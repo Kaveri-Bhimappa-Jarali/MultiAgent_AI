@@ -45,26 +45,28 @@ class Settings(BaseSettings):
     SYSLOG_LISTEN_HOST: str = os.environ.get("SYSLOG_LISTEN_HOST", "0.0.0.0")
     SYSLOG_LISTEN_PORT: int = int(os.environ.get("SYSLOG_LISTEN_PORT", "5514"))
     ALLOWED_LAB_SUBNETS: str = os.environ.get("ALLOWED_LAB_SUBNETS", "192.168.0.0/16,10.0.0.0/8,172.16.0.0/12,127.0.0.0/8")
+    CORRELATION_WINDOW_SECONDS: int = int(os.environ.get("CORRELATION_WINDOW_SECONDS", "900"))
 
     # Attacker VM
-    ATTACKER_VM_HOST: str = "45.74.156.44"
-    ATTACKER_VM_PRIVATE_IP: str = "10.0.0.12"
-    ATTACKER_VM_USER: str = "ubuntu"
-    ATTACKER_VM_SSH_PORT: int = 22
-    ATTACKER_VM_SSH_KEY_PATH: str = ""
+    ATTACKER_VM_HOST: str = os.environ.get("ATTACKER_VM_HOST", "45.74.156.41")
+    ATTACKER_VM_PRIVATE_IP: str = os.environ.get("ATTACKER_VM_PRIVATE_IP", "10.0.0.13")
+    ATTACKER_VM_USER: str = os.environ.get("ATTACKER_VM_USER", "ubuntu")
+    ATTACKER_VM_SSH_PORT: int = int(os.environ.get("ATTACKER_VM_SSH_PORT", "22"))
+    ATTACKER_VM_SSH_KEY_PATH: str = os.environ.get("ATTACKER_VM_SSH_KEY_PATH", "C:/Users/VICTUS/.ssh/soc_lab")
 
     # Victim VM
-    VICTIM_VM_HOST: str = "45.74.156.43"
-    VICTIM_VM_PRIVATE_IP: str = "10.0.0.11"
-    VICTIM_VM_USER: str = "ubuntu"
-    VICTIM_VM_SSH_PORT: int = 22
-    VICTIM_VM_INTERFACE: str = "eth0"
+    VICTIM_VM_HOST: str = os.environ.get("VICTIM_VM_HOST", "45.74.156.44")
+    VICTIM_VM_PRIVATE_IP: str = os.environ.get("VICTIM_VM_PRIVATE_IP", "10.0.0.12")
+    VICTIM_VM_USER: str = os.environ.get("VICTIM_VM_USER", "ubuntu")
+    VICTIM_VM_SSH_PORT: int = int(os.environ.get("VICTIM_VM_SSH_PORT", "22"))
+    VICTIM_VM_SSH_KEY_PATH: str = os.environ.get("VICTIM_VM_SSH_KEY_PATH", "C:/Users/VICTUS/.ssh/soc_lab")
+    VICTIM_VM_INTERFACE: str = os.environ.get("VICTIM_VM_INTERFACE", "eth0")
 
     # Attack Simulation Configuration
     ATTACK_SIMULATION_ENABLED: bool = True
     ATTACK_SIMULATION_MAX_CONCURRENT: int = 1
     ATTACK_SIMULATION_TIMEOUT: int = 300
-    ATTACK_SIMULATION_ALLOWED_TARGETS: str = "10.0.0.11"
+    ATTACK_SIMULATION_ALLOWED_TARGETS: str = os.environ.get("ATTACK_SIMULATION_ALLOWED_TARGETS", "10.0.0.12,10.0.0.13,10.0.0.11,192.168.56.15,192.168.56.10")
 
     class Config:
         env_file = (".env", "backend/.env", "../.env")

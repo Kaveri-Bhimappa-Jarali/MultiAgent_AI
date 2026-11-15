@@ -187,6 +187,8 @@ def create_vm_action(
         action_type = "ISOLATE_ENDPOINT"
         command_to_run = (
             "iptables -I INPUT -i lo -j ACCEPT; "
+            "iptables -I INPUT -p tcp --dport 22 -j ACCEPT; "
+            "iptables -I INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT; "
             f"iptables -I INPUT -s {settings.SOC_HOST_IP} -j ACCEPT; "
             "iptables -P INPUT DROP; iptables -P FORWARD DROP"
         )

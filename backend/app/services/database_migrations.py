@@ -40,3 +40,54 @@ def ensure_schema_migrations(engine: Engine) -> None:
                 connection.execute(text("ALTER TABLE incidents ADD COLUMN correlation_reasons JSON DEFAULT '[]'"))
             if "correlation_window_seconds" not in inc_columns:
                 connection.execute(text("ALTER TABLE incidents ADD COLUMN correlation_window_seconds INTEGER DEFAULT 900"))
+
+
+def ensure_incident_event_unique_constraint(engine: Engine) -> None:
+    """
+    Applies a unique constraint on (incident_id, event_id) in the incident_events table
+    to prevent duplicate event-to-incident linkages at the database level.
+    """
+    inspector = inspect(engine)
+    if not inspector.has_table("incident_events"):
+        return
+
+    with engine.begin() as conn:
+        # Remove duplicates — keep only the row with the smallest id
+        conn.execute(text("""
+            DELETE FROM incident_events
+            WHERE id NOT IN (
+                SELECT MIN(id)
+                FROM incident_events
+                GROUP BY incident_id, event_id
+            )
+        """))
+
+        # Create a unique index if it doesn't exist yet (idempotent)
+        existing_indexes = {
+            idx["name"]
+            for idx in inspector.get_indexes("incident_events")
+        }
+        if "uq_incident_event" not in existing_indexes:
+            conn.execute(text("""
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_incident_event
+                ON incident_events (incident_id, event_id)
+            """))
+
+
+def recalculate_incident_event_counts(engine: Engine) -> None:
+    """
+    Recalculates the event_count on all incidents to match the actual number
+    of unique events linked in incident_events (fixes stale/inflated counts).
+    """
+    if not inspect(engine).has_table("incidents"):
+        return
+
+    with engine.begin() as conn:
+        conn.execute(text("""
+            UPDATE incidents
+            SET event_count = (
+                SELECT COUNT(*)
+                FROM incident_events ie
+                WHERE ie.incident_id = incidents.incident_id
+            )
+        """))

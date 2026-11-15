@@ -251,8 +251,40 @@ export function MultiAgentPipeline() {
 
   useEffect(() => {
     fetchAllData()
-    const interval = setInterval(fetchAllData, 15000)
-    return () => clearInterval(interval)
+    const interval = setInterval(fetchAllData, 10000)
+
+    let debounceTimer = null
+    const ws = api.connectWebSocket(
+      (msg) => {
+        if (!msg) return
+        const msgType = msg.type || msg.event
+        if ([
+          'AGENT_FINDING_RECORDED',
+          'EVENT_PROCESSED',
+          'INCIDENT_CREATED',
+          'INCIDENT_UPDATED',
+          'SIMULATION_STARTED',
+          'SIMULATION_COMPLETED',
+          'DETECTION_TRIGGERED',
+          'AGENT_STATUS_CHANGED'
+        ].includes(msgType)) {
+          clearTimeout(debounceTimer)
+          debounceTimer = setTimeout(() => {
+            fetchAllData()
+          }, 350)
+        }
+      },
+      () => {},
+      () => {}
+    )
+
+    return () => {
+      clearInterval(interval)
+      clearTimeout(debounceTimer)
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.close()
+      }
+    }
   }, [])
 
   // Action Handlers
@@ -312,9 +344,9 @@ export function MultiAgentPipeline() {
     return map
   }, [allEvents])
 
-  // Stage 1: Individual Agent Findings Filtered
+  // Stage 1: Individual Agent Findings Filtered & Deduplicated
   const individualAgentFindings = useMemo(() => {
-    return findings.filter((f) => {
+    const filtered = findings.filter((f) => {
       if (selectedAgentFilter !== 'ALL') {
         const targetClean = selectedAgentFilter.replace(' Agent', '').toLowerCase()
         const agentClean = (f.agent_name || '').replace(' Agent', '').toLowerCase()
@@ -333,6 +365,40 @@ export function MultiAgentPipeline() {
       }
       return true
     })
+
+    // Group repeating findings with identical agent + title + pivot to prevent alert fatigue
+    const groupedMap = new Map()
+    for (const f of filtered) {
+      const pivot = f.evidence?.source_ip || f.evidence?.host || f.evidence?.username || f.evidence?.pivot_entity || ''
+      const key = `${f.agent_name || ''}::${f.title || ''}::${pivot}`
+
+      const evIds = Array.isArray(f.evidence?.event_ids)
+        ? f.evidence.event_ids
+        : f.evidence?.event_id ? [f.evidence.event_id] : (f.source_event_ids || [])
+
+      if (!groupedMap.has(key)) {
+        groupedMap.set(key, {
+          ...f,
+          groupedCount: 1,
+          aggregatedEventIds: [...evIds],
+          latestTimestamp: f.created_at || f.timestamp
+        })
+      } else {
+        const existing = groupedMap.get(key)
+        existing.groupedCount += 1
+        const combinedEvs = new Set([...existing.aggregatedEventIds, ...evIds])
+        existing.aggregatedEventIds = Array.from(combinedEvs)
+        if ((f.confidence || 0) > (existing.confidence || 0)) {
+          existing.confidence = f.confidence
+        }
+        if (new Date(f.created_at || f.timestamp) > new Date(existing.latestTimestamp)) {
+          existing.latestTimestamp = f.created_at || f.timestamp
+          existing.created_at = f.created_at || f.timestamp
+        }
+      }
+    }
+
+    return Array.from(groupedMap.values())
   }, [findings, selectedAgentFilter, selectedSeverityFilter, searchQuery])
 
   // Stage 2: Correlation Agent Findings & Incidents
@@ -616,7 +682,7 @@ export function MultiAgentPipeline() {
           >
             <span className="px-1.5 py-0.5 rounded bg-fuchsia-500/30 text-fuchsia-200 text-[9px] font-bold">STAGE 2</span>
             <span>Correlation Agent</span>
-            <span className="px-1.5 py-0.5 rounded bg-fuchsia-400/20 text-fuchsia-200 text-[10px]">{incidents.length}</span>
+            <span className="px-1.5 py-0.5 rounded bg-fuchsia-400/20 text-fuchsia-200 text-[10px]">{correlationFindings.length || incidents.length}</span>
           </button>
 
           <button
@@ -801,7 +867,14 @@ export function MultiAgentPipeline() {
 
                     {/* Finding Title & Description */}
                     <div>
-                      <h4 className="text-sm font-semibold text-white leading-snug">{finding.title}</h4>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h4 className="text-sm font-semibold text-white leading-snug">{finding.title}</h4>
+                        {finding.groupedCount > 1 && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40 whitespace-nowrap">
+                            {finding.groupedCount} Detections Grouped
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-slate-300 mt-1 leading-relaxed">{finding.description}</p>
                     </div>
 
@@ -915,7 +988,7 @@ export function MultiAgentPipeline() {
 
             <div className="flex items-center gap-2 text-xs font-mono text-fuchsia-300">
               <span className="px-3 py-1 rounded-full bg-fuchsia-500/15 border border-fuchsia-500/30 font-semibold">
-                {incidents.length} Established Incident Correlation{incidents.length !== 1 ? 's' : ''}
+                {incidents.length} Established Incident Correlation{incidents.length !== 1 ? 's' : ''} ({correlationFindings.length || incidents.length} Signals)
               </span>
             </div>
           </div>
