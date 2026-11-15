@@ -16,10 +16,10 @@ import { MultiAgentPipeline } from '../components/pipeline/MultiAgentPipeline'
 // Real-data defaults – shown while API is loading (no fake numbers)
 const emptyMetrics = {
   eventsReceived:    { value: '—', label: 'Events Received',    sub: 'Loading…', trend: '',           color: '#8b5cf6' },
-  correlatedEvents:  { value: '—', label: 'Correlated Events',  sub: 'Loading…', trend: '',           color: '#06b6d4' },
+  correlatedEvents:  { value: '—', label: 'Correlated Incidents',  sub: 'Loading…', trend: '',           color: '#06b6d4' },
   activeThreats:     { value: '—', label: 'Active Threats',     sub: 'Loading…', trend: '',           color: '#f97316' },
-  criticalIncidents: { value: '—', label: 'Critical Incidents', sub: 'Loading…', trend: '',           color: '#ef4444' },
-  aiAnalyses:        { value: '—', label: 'AI Analyses',        sub: 'Loading…', trend: 'Agent Data', color: '#d946ef' },
+  criticalIncidents: { value: '—', label: 'High / Critical Incidents', sub: 'Loading…', trend: '',           color: '#ef4444' },
+  aiAnalyses:        { value: '—', label: 'Agent Findings',        sub: 'Loading…', trend: 'Agent Data', color: '#d946ef' },
   overallRiskScore: 0,
 }
 
@@ -35,12 +35,7 @@ export function Dashboard() {
 
   const loadBackendDashboard = useCallback(async () => {
     try {
-      // Fetch dashboard summary + agent status (for total findings count) in parallel
-      const [data, agentStatuses, allIncidents] = await Promise.all([
-        api.getDashboardSummary(),
-        api.getAgentsStatus().catch(() => []),
-        api.getIncidents().catch(() => []),
-      ])
+      const data = await api.getDashboardSummary()
       if (!data) return
 
       setBackendStatus('ONLINE')
@@ -49,52 +44,34 @@ export function Dashboard() {
 
       const m = data.metrics || data.kpis || {}
 
-      // Total agent findings = sum of each agent's total_findings from /api/agents/status
-      const totalFindings = Array.isArray(agentStatuses)
-        ? agentStatuses.reduce((sum, a) => sum + (a.total_findings || 0), 0)
-        : 0
-
-      // All incidents: total count
-      const incidentList = Array.isArray(allIncidents) ? allIncidents : []
-      const totalIncidents = incidentList.length
-
-      // Correlated events = number of incidents (each incident = correlation cluster)
-      const correlatedCount = totalIncidents
-
-      // Active threats = open (non-contained) incidents
-      const openCount = m.open_incidents ?? incidentList.filter(i => i.status !== 'CONTAINED').length
-
-      // Critical incidents = HIGH or CRITICAL severity
-      const critCount = m.critical_high_incidents ?? incidentList.filter(i => ['CRITICAL','HIGH'].includes(i.severity)).length
-
-      // AI Analyses = findings from Investigation + Correlation agents
-      const aiCount = Array.isArray(agentStatuses)
-        ? agentStatuses
-            .filter(a => ['Investigation Agent','Correlation Agent','Attack-Path Analysis Agent'].some(n => a.name?.includes(n.split(' ')[0])))
-            .reduce((sum, a) => sum + (a.total_findings || 0), 0)
-        : totalFindings
+      const totalFindings = m.total_findings ?? 0
+      const totalIncidents = m.total_incidents ?? 0
+      const correlatedCount = m.correlated_incidents ?? 0
+      const openCount = m.open_incidents ?? 0
+      const critCount = m.critical_high_incidents ?? 0
+      const aiCount = totalFindings
 
       const totalEvents = m.total_events ?? 0
 
       setMetrics({
         eventsReceived:    { value: totalEvents.toLocaleString(),  label: 'Events Received',    sub: 'Real-time security feed',          trend: '',                  color: '#8b5cf6' },
-        correlatedEvents:  { value: correlatedCount.toString(),     label: 'Correlated Events',  sub: 'Correlation Engine Active',         trend: `${totalIncidents} Incidents`, color: '#06b6d4' },
+        correlatedEvents:  { value: correlatedCount.toString(),     label: 'Correlated Incidents',  sub: 'Correlation Engine Active',         trend: `${totalIncidents} Incidents`, color: '#06b6d4' },
         activeThreats:     { value: openCount.toString(),           label: 'Active Threats',     sub: `${critCount} High Risk`,           trend: '',                  color: '#f97316' },
-        criticalIncidents: { value: critCount.toString(),           label: 'Critical Incidents', sub: 'Needs Immediate Attention',         trend: `${m.contained_threats ?? 0} Contained`, color: '#ef4444' },
-        aiAnalyses:        { value: aiCount.toString(),             label: 'AI Analyses',        sub: 'Multi-Agent Pipeline',             trend: 'Live',              color: '#d946ef' },
-        overallRiskScore: Math.round(m.avg_risk_score || (critCount > 0 ? 70 : 30)),
+        criticalIncidents: { value: critCount.toString(),           label: 'High / Critical Incidents', sub: 'Needs Immediate Attention',         trend: `${m.contained_threats ?? 0} Contained`, color: '#ef4444' },
+        aiAnalyses:        { value: aiCount.toString(),             label: 'Agent Findings',        sub: 'Multi-Agent Pipeline',             trend: 'Live',              color: '#d946ef' },
+        overallRiskScore: Math.round(m.avg_risk_score ?? 0),
       })
 
       // Build workflow pipeline stages from real data
       setWorkflowData([
         { id: 'events',      label: 'Events Received',       icon: '📥', count: totalEvents.toLocaleString(),   status: 'Active Ingest',   desc: 'Normalized Syslog, WAF & EDR streams' },
         { id: 'correlation', label: 'Correlation Engine',    icon: '🔗', count: correlatedCount.toString(),      status: 'Correlating',     desc: 'Graph clustering & multi-event chains' },
-        { id: 'llm',         label: 'LLM Analysis',          icon: '🧠', count: aiCount.toString(),              status: 'Reasoning',       desc: 'Observation synthesis & threat diagnosis' },
-        { id: 'severity',    label: 'Severity Classification',icon: '⚠️', count: `${critCount} Critical`,        status: `Scored (${Math.round(m.avg_risk_score || 70)}/100)`, desc: 'Multi-factor risk & impact scoring' },
-        { id: 'action',      label: 'Response Decision',     icon: '⚡', count: '4 Tiers',                       status: 'Automated / Human', desc: 'Allow • Monitor • Investigate • Block' },
+        { id: 'llm',         label: 'Agent Findings',          icon: '🧠', count: aiCount.toString(),              status: 'Reasoning',       desc: 'Observation synthesis & threat diagnosis' },
+        { id: 'severity',    label: 'Severity Classification',icon: '⚠️', count: `${critCount} Critical`,        status: `Scored (${Math.round(m.avg_risk_score ?? 0)}/100)`, desc: 'Multi-factor risk & impact scoring' },
+        { id: 'action',      label: 'Response Decision',     icon: '⚡', count: String(m.response_actions ?? 0),                       status: 'Automated / Human', desc: 'Allow • Monitor • Investigate • Block' },
       ])
     } catch (err) {
-      setBackendStatus('LOCAL_SIM')
+      setBackendStatus('UNAVAILABLE')
     }
   }, [])
 

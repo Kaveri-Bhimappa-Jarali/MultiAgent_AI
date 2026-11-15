@@ -2,6 +2,7 @@ import React from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { DashboardLayout } from './components/layout/DashboardLayout'
 import { Dashboard } from './pages/Dashboard'
+import { EvidenceRecords } from './pages/EvidenceRecords'
 import { Events } from './pages/Events'
 import { Correlation } from './pages/Correlation'
 import { AIAnalysis } from './pages/AiAnalysis'
@@ -31,7 +32,7 @@ export default function App() {
         {/* Protected Dashboard Layout with all SOC Operations */}
         <Route path="/" element={<DashboardLayout />}>
           <Route index element={<Dashboard />} />
-          <Route path="events" element={<Events />} />
+          <Route path="events" element={<EvidenceRecords />} />
           <Route path="correlation" element={<Correlation />} />
           <Route path="ai-analysis" element={<AIAnalysis />} />
           <Route path="incidents" element={<Incidents />} />
@@ -53,7 +54,8 @@ export default function App() {
           <Route path="settings" element={<Settings />} />
 
           {/* Fallback alias routes */}
-          <Route path="alerts" element={<Navigate to="/events" replace />} />
+          <Route path="findings" element={<EvidenceRecords findings />} />
+          <Route path="alerts" element={<EvidenceRecords findings />} />
           <Route path="threats" element={<Navigate to="/correlation" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

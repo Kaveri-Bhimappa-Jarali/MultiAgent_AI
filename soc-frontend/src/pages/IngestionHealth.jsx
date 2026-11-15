@@ -18,6 +18,8 @@ import {
 } from 'lucide-react'
 
 export function IngestionHealth() {
+  const [models, setModels] = useState(null)
+  const [error, setError] = useState('')
   const [pipeline, setPipeline] = useState(null)
   const [collectors, setCollectors] = useState([])
   const [loading, setLoading] = useState(true)
@@ -34,31 +36,18 @@ export function IngestionHealth() {
   })
   const [ingestStatus, setIngestStatus] = useState(null)
 
-  const defaultCollectors = [
-    { id: 'scapy_sniffer', name: 'Scapy Packet Flow Sniffer', type: 'network', status: 'RUNNING', events_captured: 4210 },
-    { id: 'syslog_collector', name: 'Syslog UDP Listener (:514)', type: 'syslog', status: 'RUNNING', events_captured: 1280 },
-    { id: 'file_watcher', name: 'Filesystem Integrity Watcher', type: 'endpoint', status: 'RUNNING', events_captured: 340 },
-    { id: 'vm_daemons', name: 'Virtual Node Telemetry Daemons', type: 'vm', status: 'RUNNING', events_captured: 5890 }
-  ]
-
   const fetchData = async () => {
+    setLoading(true)
     try {
-      setLoading(true)
-      const [pipe, coll] = await Promise.all([
-        api.getPipelineHealth().catch(() => ({
-          queue_depth: 14,
-          queue_capacity: 10000,
-          events_per_sec: 24.5,
-          total_ingested: 14200,
-          dropped_events: 0,
-          avg_latency_ms: 18.2
-        })),
-        api.getCollectorsHealth().catch(() => defaultCollectors)
+      const [pipe, coll, model] = await Promise.all([
+        api.getPipelineHealth(), api.getCollectorsHealth(), api.getModelHealth()
       ])
-      setPipeline(pipe)
-      setCollectors(coll && coll.length > 0 ? coll : defaultCollectors)
+      setPipeline({ ...pipe, ...(pipe.queue || {}), avg_latency_ms: pipe.queue?.avg_detection_latency_ms })
+      setCollectors(Array.isArray(coll) ? coll : (coll.collectors || []))
+      setModels(model)
+      setError('')
     } catch (err) {
-      console.error('Failed to load ingestion health', err)
+      setError(`Health API unavailable: ${err.message}. Previously loaded measurements may be stale.`)
     } finally {
       setLoading(false)
     }
@@ -101,6 +90,8 @@ export function IngestionHealth() {
 
   return (
     <div className="p-4 lg:p-8 space-y-7">
+      {error && <p role="alert" className="text-red-300">{error}</p>}
+      {models && <section className="rounded border border-slate-700 p-4 text-slate-300 text-sm"><h2 className="font-bold">Model and dataset readiness</h2><p>Anomaly baseline: {models.anomaly.baseline_source}</p><p>Supervised model: {models.supervised.status}</p><p>{models.anomaly.load_warning}</p><p>{Object.entries(models.datasets).map(([name, state]) => `${name}: ${state.available ? 'available' : 'missing'}`).join(' · ')}</p></section>}
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2">
         <div>
@@ -141,21 +132,21 @@ export function IngestionHealth() {
           <div className="p-4 rounded-2xl bg-[#0d121c] border border-[#1e2736]">
             <span className="text-[10px] font-mono uppercase text-slate-400">Queue Depth / Max</span>
             <div className="text-2xl font-black text-cyan-400 mt-1 font-mono">
-              {pipeline.queue_depth || 12} / {pipeline.queue_capacity || 10000}
+              {pipeline.queue_depth ?? 0} / {pipeline.queue_capacity ?? 'Unknown'}
             </div>
             <div className="text-[10px] text-slate-500 mt-0.5">Asynchronous buffer depth</div>
           </div>
           <div className="p-4 rounded-2xl bg-[#0d121c] border border-[#1e2736]">
             <span className="text-[10px] font-mono uppercase text-slate-400">Processing Ingress Rate</span>
             <div className="text-2xl font-black text-emerald-400 mt-1 font-mono">
-              {pipeline.events_per_sec || 24.5} eps
+              {pipeline.events_per_sec ?? 'Not measured'} eps
             </div>
             <div className="text-[10px] text-slate-500 mt-0.5">Events processed / sec</div>
           </div>
           <div className="p-4 rounded-2xl bg-[#0d121c] border border-[#1e2736]">
             <span className="text-[10px] font-mono uppercase text-slate-400">Ingestion Latency</span>
             <div className="text-2xl font-black text-purple-400 mt-1 font-mono">
-              {pipeline.avg_latency_ms || 18.2} ms
+              {pipeline.avg_latency_ms ?? 'Not measured'} ms
             </div>
             <div className="text-[10px] text-slate-500 mt-0.5">SLA: $\le 100$ ms</div>
           </div>

@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 
 export function Responses() {
+  const [error, setError] = useState('')
   const [actions, setActions] = useState([])
   const [verifications, setVerifications] = useState([])
   const [loading, setLoading] = useState(true)
@@ -31,12 +32,14 @@ export function Responses() {
     try {
       setLoading(true)
       const [resList, verList] = await Promise.all([
-        api.getResponses().catch(() => []),
-        api.getVerifications().catch(() => [])
+        api.getResponses(),
+        api.getVerifications()
       ])
+      setError('')
       setActions(resList || [])
       setVerifications(verList || [])
     } catch (err) {
+      setError(err.message)
       console.error('Failed to load response actions', err)
     } finally {
       setLoading(false)
@@ -52,6 +55,7 @@ export function Responses() {
       await api.approveResponse(actionId)
       await fetchData()
     } catch (err) {
+      setError(err.message)
       console.error('Failed to approve action', err)
     }
   }
@@ -61,6 +65,7 @@ export function Responses() {
       await api.denyResponse(actionId)
       await fetchData()
     } catch (err) {
+      setError(err.message)
       console.error('Failed to deny action', err)
     }
   }
@@ -70,16 +75,8 @@ export function Responses() {
       await api.executeResponse(actionId, dryRun)
       await fetchData()
     } catch (err) {
+      setError(err.message)
       console.error('Failed to execute action', err)
-    }
-  }
-
-  const handleRollback = async (actionId) => {
-    try {
-      await api.allowResponse(actionId)
-      await fetchData()
-    } catch (err) {
-      console.error('Failed to rollback action', err)
     }
   }
 
@@ -87,9 +84,10 @@ export function Responses() {
     try {
       setIsSimulating(true)
       setSimulatingAction(action)
-      const res = await api.simulateResponse(action.id || action.action_id)
+      const res = await api.simulateResponse(action.action_id)
       setSimulationResult(res)
     } catch (err) {
+      setError(err.message)
       console.error('Failed to simulate action', err)
     } finally {
       setIsSimulating(false)
@@ -103,6 +101,7 @@ export function Responses() {
 
   return (
     <div className="p-4 lg:p-8 space-y-7">
+      {error && <p role="alert" className="text-red-300">{error}</p>}
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2">
         <div>
@@ -116,7 +115,7 @@ export function Responses() {
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-1 font-medium">
-            Human-in-the-loop analyst gates, blast radius simulation, one-click rollback, and 7-state telemetry verification
+            Approval, dry-run, lab dispatch and evidence-based verification
           </p>
         </div>
 
@@ -149,7 +148,7 @@ export function Responses() {
                 : 'text-slate-400 hover:text-white'
             }`}
           >
-            7-State Verification Monitor ({verifications.length})
+            Response Verification ({verifications.length})
           </button>
         </div>
 
@@ -188,18 +187,18 @@ export function Responses() {
                 </thead>
                 <tbody className="divide-y divide-[#182130] text-slate-300">
                   {filteredActions.map((act) => {
-                    const id = act.id || act.action_id
+                    const id = act.action_id
                     return (
                       <tr key={id} className="hover:bg-purple-950/10">
                         <td className="py-3 text-purple-400 font-bold">{String(id || '').substring(0, 16)}</td>
                         <td className="py-3 font-semibold text-white">{act.action_type}</td>
-                        <td className="py-3 text-cyan-400">{act.target_entity}</td>
+                        <td className="py-3 text-cyan-400">{act.target_value}</td>
                         <td className="py-3">
                           <Badge type={act.status}>{act.status}</Badge>
                         </td>
                         <td className="py-3">
                           <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-[10px] text-purple-300">
-                            {act.blast_radius || 'LOW (1 Host)'}
+                            {act.blast_radius || 'Not assessed'}
                           </span>
                         </td>
                         <td className="py-3 text-right">
@@ -212,7 +211,7 @@ export function Responses() {
                               Simulate
                             </button>
 
-                            {act.status === 'PENDING_APPROVAL' && (
+                            {['PENDING_APPROVAL', 'RECOMMENDED', 'SIMULATED'].includes(act.status) && (
                               <>
                                 <button
                                   onClick={() => handleApprove(id)}
@@ -238,15 +237,10 @@ export function Responses() {
                               </button>
                             )}
 
-                            {act.status === 'ACTIVE' && (
-                              <button
-                                onClick={() => handleRollback(id)}
-                                className="px-2.5 py-1 rounded-lg bg-amber-950/40 border border-amber-500/40 text-amber-300 text-[11px] hover:bg-amber-900/40 flex items-center gap-1 transition-colors"
-                              >
-                                <RotateCcw className="w-3 h-3" />
-                                <span>Rollback</span>
-                              </button>
-                            )}
+                            {['EXECUTED', 'PENDING_VERIFICATION'].includes(act.status) && <button
+                              className="px-2 py-1 border border-slate-700 rounded"
+                              onClick={async () => { try { await api.verifyResponse(id); await fetchData() } catch (err) { setError(err.message) } }}>Verify</button>}
+
                           </div>
                         </td>
                       </tr>

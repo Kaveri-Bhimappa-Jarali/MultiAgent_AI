@@ -67,10 +67,10 @@ export function AttackPathGraph({ graph }) {
         <div>
           <h4 className="text-sm font-bold text-white flex items-center gap-2">
             <ShieldAlert className="w-4 h-4 text-purple-400" />
-            <span>Topological Attack-Path Traversal (DAG)</span>
+            <span>Incident Evidence Relationships</span>
           </h4>
           <p className="text-xs text-slate-400 mt-0.5 font-mono">
-            Click on any entity node to inspect telemetry, credentials and pivot evidence.
+            Click on any entity node to inspect telemetry and supporting evidence.
           </p>
         </div>
 
@@ -78,15 +78,15 @@ export function AttackPathGraph({ graph }) {
         <div className="flex items-center gap-4 text-xs font-mono">
           <span className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-[0_0_8px_#f43f5e]" />
-            <span className="text-slate-400">Attacker / Crown Jewel</span>
+            <span className="text-slate-400">Observed relationship</span>
           </span>
           <span className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_#f59e0b]" />
-            <span className="text-slate-400">Compromised</span>
+            <span className="text-slate-400">Inferred (dashed)</span>
           </span>
           <span className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-purple-500 shadow-[0_0_8px_#a855f7]" />
-            <span className="text-slate-400">Affected Host</span>
+            <span className="text-slate-400">Entity</span>
           </span>
         </div>
       </div>
@@ -108,15 +108,13 @@ export function AttackPathGraph({ graph }) {
           </defs>
 
           {/* Directed Edges */}
-          {nodePositions.map((pos, idx) => {
-            if (idx === nodePositions.length - 1) return null
-            const nextPos = nodePositions[idx + 1]
-            const matchingEdge = edges.find(
-              (e) => e.source === pos.id && e.target === nextPos.id
-            ) || edges[idx]
+          {edges.map((matchingEdge, idx) => {
+            const pos = nodePositions.find(n => n.id === matchingEdge.source)
+            const nextPos = nodePositions.find(n => n.id === matchingEdge.target)
+            if (!pos || !nextPos) return null
 
             return (
-              <g key={`edge-${pos.id}-${nextPos.id}`}>
+              <g key={matchingEdge.id || `edge-${idx}`}><title>{`${matchingEdge.status || 'unknown'}: ${(matchingEdge.event_ids || []).join(', ')} ${(matchingEdge.timestamps || []).join(', ')}`}</title>
                 <line
                   x1={pos.x + 32}
                   y1={pos.y}
@@ -124,7 +122,7 @@ export function AttackPathGraph({ graph }) {
                   y2={nextPos.y}
                   stroke="#a855f7"
                   strokeWidth="2.5"
-                  strokeDasharray="6,4"
+                  strokeDasharray={matchingEdge.status === 'inferred' ? '6,4' : undefined}
                   markerEnd="url(#arrowhead-soc)"
                   className="transition-all"
                 />
@@ -138,7 +136,7 @@ export function AttackPathGraph({ graph }) {
                     textAnchor="middle"
                     className="select-none font-semibold"
                   >
-                    {matchingEdge.stage || matchingEdge.relation || 'traversal'}
+                    {matchingEdge.relation || 'observed relationship'}
                   </text>
                 )}
               </g>

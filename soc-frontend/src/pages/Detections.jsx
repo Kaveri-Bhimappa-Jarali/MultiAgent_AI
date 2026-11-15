@@ -74,7 +74,7 @@ export function Detections() {
       setEvaluating(true)
       setEvalResult(null)
       const res = await api.triggerEvaluation()
-      setEvalResult(`Evaluated ${res.events_evaluated || 142} unprocessed events. Generated ${res.new_findings_generated || 3} new detection findings.`)
+      setEvalResult(`Evaluated ${res.events_evaluated ?? 0} unprocessed events. Generated ${res.new_findings_generated ?? 0} new detection findings.`)
       await fetchData()
     } catch (err) {
       console.error('Failed to trigger evaluation', err)

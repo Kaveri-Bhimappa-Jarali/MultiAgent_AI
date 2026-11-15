@@ -69,11 +69,13 @@ export const api = {
   logout: () => request('/auth/logout', { method: 'POST' }),
 
   // Dashboard & KPIs
+  getModelHealth: () => request('/health/models'),
   getDashboardSummary: () => request('/dashboard/summary'),
 
   // Events & Ingest
   getEvents: (params = {}) => {
     const q = new URLSearchParams()
+    for (const key of ["source_type", "host", "start_time", "end_time"]) if (params[key]) q.append(key, params[key])
     if (params.limit) q.append('limit', params.limit)
     if (params.offset) q.append('offset', params.offset)
     if (params.severity) q.append('severity', params.severity)
@@ -82,6 +84,8 @@ export const api = {
     if (params.is_simulated !== undefined) q.append('is_simulated', String(params.is_simulated))
     return request(`/events?${q.toString()}`)
   },
+  getEventEvidence: (id) => request(`/events/${encodeURIComponent(id)}/evidence`),
+  searchAgentFindings: (params = {}) => request(`/agents/findings/search?${new URLSearchParams(params)}`),
   getEvent: (id) => request(`/events/${id}`),
   ingestEvent: (event) =>
     request('/events/ingest', { method: 'POST', body: JSON.stringify(event) }),

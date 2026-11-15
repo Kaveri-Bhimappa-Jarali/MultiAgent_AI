@@ -148,7 +148,7 @@ export function Agents() {
         {Object.entries(AGENT_METADATA).map(([name, meta]) => {
           const liveAgent = (Array.isArray(agents) ? agents : []).find(
             (a) => a.name === name || (name.includes('Attack') && (a.name || '').includes('Attack'))
-          ) || { status: 'READY', last_run_time: null, total_findings: 0 }
+          ) || { status: 'NO_RECENT_INPUT', last_run_time: null, total_findings: 0 }
 
           const Icon = meta.icon
           const isSelected = selectedAgentName === name
@@ -179,13 +179,13 @@ export function Agents() {
                 </h3>
                 <div className="text-[10px] text-slate-400 mt-1 font-mono flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  <span>Status: {liveAgent.status || 'READY'}</span>
+                  <span>Status: {liveAgent.status || 'NO_RECENT_INPUT'}</span>
                 </div>
               </div>
 
               <div className="mt-3 pt-2.5 border-t border-[#182130] flex items-center justify-between">
                 <span className="text-[10px] font-mono text-slate-500">
-                  {liveAgent.total_findings !== undefined ? `${liveAgent.total_findings} findings` : '<50ms'}
+                  {liveAgent.total_findings !== undefined ? `${liveAgent.total_findings} findings` : 'Not measured'}
                 </span>
                 <button
                   onClick={(e) => {

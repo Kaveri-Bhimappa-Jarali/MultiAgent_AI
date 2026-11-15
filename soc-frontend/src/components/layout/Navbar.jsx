@@ -29,6 +29,7 @@ import {
 const NAV_LINKS = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, exact: true },
   { to: '/events', label: 'Events', icon: Inbox },
+  { to: '/findings', label: 'Findings', icon: Bell },
   { to: '/correlation', label: 'Correlation', icon: GitMerge },
   { to: '/ai-analysis', label: 'AI Analysis', icon: BrainCircuit },
   { to: '/incidents', label: 'Incidents', icon: Flame },

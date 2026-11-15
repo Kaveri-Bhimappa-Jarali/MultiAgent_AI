@@ -133,7 +133,7 @@ export function ThreatIntel() {
               <div className="text-right">
                 <span className="text-slate-400 text-[10px] uppercase block">CTI Score</span>
                 <span className="text-xl font-black text-rose-400">
-                  {lookupResult.reputation_score || 95} / 100
+                  {lookupResult.reputation_score ?? 'Unknown'} / 100
                 </span>
               </div>
             </div>
@@ -187,7 +187,7 @@ export function ThreatIntel() {
                     <td className="py-3 text-purple-300 font-bold">{ind.indicator}</td>
                     <td className="py-3 text-slate-400 uppercase">{ind.indicator_type || 'IPV4'}</td>
                     <td className="py-3 text-white font-semibold">{ind.threat_actor || 'APT29 / CozyBear'}</td>
-                    <td className="py-3 text-rose-400 font-bold">{ind.reputation_score || 90}/100</td>
+                    <td className="py-3 text-rose-400 font-bold">{ind.reputation_score ?? 'Unknown'}/100</td>
                     <td className="py-3">
                       <Badge type={ind.verdict || 'MALICIOUS'}>{ind.verdict || 'MALICIOUS'}</Badge>
                     </td>
