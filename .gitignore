@@ -9,6 +9,8 @@ __pycache__/
 *.db
 *.db-wal
 *.db-shm
+*.db.bak
+*.bak
 *.sqlite
 *.sqlite3
 acceptance_test.db
