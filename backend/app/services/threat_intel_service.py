@@ -54,6 +54,26 @@ SAMPLE_THREAT_INDICATORS = [
         "severity": "CRITICAL",
         "tags": ["Dropper", "PowerShell", "Ransomware"],
         "description": "Obfuscated PowerShell loader script designed to execute in-memory shellcode."
+    },
+    {
+        "indicator_type": "IP",
+        "indicator_value": "45.74.156.44",
+        "threat_name": "Adversary Emulation & C2 Staging Node",
+        "threat_actor": "RedTeam / Cyber Adversary Emulation",
+        "confidence": 0.96,
+        "severity": "CRITICAL",
+        "tags": ["Attacker", "C2", "ExploitNode", "HighConfidence"],
+        "description": "Known adversarial node generating multi-stage reconnaissance, authentication brute-force, and web exploit bursts."
+    },
+    {
+        "indicator_type": "IP",
+        "indicator_value": "10.0.0.19",
+        "threat_name": "Hostile Lab Pivot / Rogue Lateral Node",
+        "threat_actor": "Internal Lateral Pivot",
+        "confidence": 0.90,
+        "severity": "HIGH",
+        "tags": ["LateralMovement", "InternalPivot", "AttackerNode"],
+        "description": "Internal testbed IP originating port sweeps, unauthorized SSH attempts, and malicious flow bursts."
     }
 ]
 

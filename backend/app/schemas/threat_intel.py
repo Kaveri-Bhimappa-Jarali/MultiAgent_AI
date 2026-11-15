@@ -19,6 +19,16 @@ class ThreatIndicatorResponse(UTCBaseModel):
     class Config:
         from_attributes = True
 
+class ThreatIndicatorCreate(BaseModel):
+    indicator_type: str  # IP, DOMAIN, SHA256
+    indicator_value: str
+    threat_name: str
+    threat_actor: str = "Unknown Threat Group"
+    confidence: float = 0.90
+    severity: str = "HIGH"  # CRITICAL, HIGH, MEDIUM, LOW
+    tags: List[str] = []
+    description: Optional[str] = None
+
 class ThreatLookupRequest(BaseModel):
     indicator: str
 

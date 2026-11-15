@@ -139,6 +139,8 @@ export const api = {
   lookupThreat: (indicator) =>
     request('/intelligence/lookup', { method: 'POST', body: JSON.stringify({ indicator }) }),
   getIndicators: () => request('/intelligence/indicators'),
+  addIndicator: (indicatorData) =>
+    request('/intelligence/indicators', { method: 'POST', body: JSON.stringify(indicatorData) }),
 
   // Historical & ML Evaluation
   getEvaluationRuns: () => request('/evaluation/runs'),

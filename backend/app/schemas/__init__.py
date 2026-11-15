@@ -5,7 +5,7 @@ from app.schemas.agent import AgentExecutionResponse, AgentFindingResponse, Agen
 from app.schemas.incident import IncidentResponse, IncidentDetailResponse, IncidentStatusUpdate, IncidentNoteCreate, IncidentNoteResponse
 from app.schemas.risk import RiskAssessmentResponse
 from app.schemas.response import ResponseActionCreate, ResponseActionResponse, VerificationResultResponse
-from app.schemas.threat_intel import ThreatIndicatorResponse, ThreatLookupRequest, ThreatLookupResponse
+from app.schemas.threat_intel import ThreatIndicatorResponse, ThreatIndicatorCreate, ThreatLookupRequest, ThreatLookupResponse
 from app.schemas.evaluation import DatasetEvaluationRequest, EvaluationRunResponse
 from app.schemas.dashboard import DashboardSummaryResponse
 
@@ -37,6 +37,7 @@ __all__ = [
     "ResponseActionResponse",
     "VerificationResultResponse",
     "ThreatIndicatorResponse",
+    "ThreatIndicatorCreate",
     "ThreatLookupRequest",
     "ThreatLookupResponse",
     "DatasetEvaluationRequest",

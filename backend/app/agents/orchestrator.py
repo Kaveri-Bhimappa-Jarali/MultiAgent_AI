@@ -131,6 +131,22 @@ class MultiAgentSOCEngine:
                     from app.services.risk_service import calculate_incident_risk
                     calculate_incident_risk(self.db, inc)
 
+                    # Trigger LLM Threat Reasoning on correlated incident findings
+                    try:
+                        from app.services.llm_service import analyze_threat_findings
+                        llm_verdict = analyze_threat_findings(
+                            self.db,
+                            findings=[],
+                            event=None,
+                            incident=inc
+                        )
+                        if llm_verdict.get("response_status") == "AUTONOMOUSLY_CONTAINED":
+                            inc.response_status = "AUTONOMOUSLY_CONTAINED"
+                            inc.status = "CONTAINED"
+                        self.db.commit()
+                    except Exception as e:
+                        print(f"[Orchestrator] LLM reasoning warning: {e}")
+
         return {
             "batch_id": batch_id,
             "events_evaluated": len(events or []),
@@ -315,7 +331,7 @@ class MultiAgentSOCEngine:
                     from app.services.risk_service import calculate_incident_risk
                     calculate_incident_risk(self.db, inc)
 
-                    # Optional LLM Threat Reasoning Layer
+                    # Trigger LLM Threat Reasoning on correlated incident findings
                     try:
                         from app.services.llm_service import analyze_threat_findings
                         llm_verdict = analyze_threat_findings(
@@ -329,7 +345,7 @@ class MultiAgentSOCEngine:
                             inc.status = "CONTAINED"
                         self.db.commit()
                     except Exception as llm_err:
-                        pass
+                        print(f"[Orchestrator] LLM reasoning warning: {llm_err}")
 
                     event_topic = "INCIDENT_CREATED" if inc_id in created_inc_ids else "INCIDENT_UPDATED"
                     broadcaster.publish_sync(event_topic, {

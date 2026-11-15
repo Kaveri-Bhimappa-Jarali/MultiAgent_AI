@@ -1250,7 +1250,7 @@ export function MultiAgentPipeline() {
                         <span className="text-slate-500 text-[10px] uppercase font-mono block">Executive Verdict</span>
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold font-mono bg-rose-500/20 text-rose-300 border border-rose-500/40">
                           <AlertOctagon className="w-3 h-3 text-rose-400" />
-                          <span>CONFIRMED_ATTACK</span>
+                          <span>{ai.verdict || 'CONFIRMED_ATTACK'}</span>
                         </span>
                       </div>
 
@@ -1264,12 +1264,30 @@ export function MultiAgentPipeline() {
                       <div className="p-3.5 rounded-xl bg-[#0b0f17]/80 border border-white/5 space-y-1 md:col-span-2">
                         <span className="text-slate-500 text-[10px] uppercase font-mono block">MITRE ATT&CK Classification</span>
                         <span className="text-xs font-bold font-mono text-amber-300 block truncate">
-                          {Array.isArray(ai.which_techniques_were_observed)
+                          {ai.mitre_technique || (Array.isArray(ai.which_techniques_were_observed)
                             ? ai.which_techniques_were_observed.join(', ')
-                            : 'T1110.001 (Password Guessing) · T1046 (Network Scanning)'}
+                            : 'T1110.001 (Password Guessing) · T1046 (Network Scanning)')}
                         </span>
                       </div>
                     </div>
+
+                    {/* LLM Grounded Reasoning & Campaign Conclusions */}
+                    {ai.reasoning && (
+                      <div className="p-4 rounded-xl bg-teal-950/30 border border-teal-500/40 text-xs font-mono space-y-2">
+                        <div className="flex items-center justify-between text-teal-300 font-bold">
+                          <span className="flex items-center gap-1.5">
+                            <Sparkles className="w-4 h-4 text-teal-400" />
+                            <span>LLM Grounded Conclusions (Ingested from Correlation Agent):</span>
+                          </span>
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-teal-500/20 text-teal-200 border border-teal-500/30 font-mono">
+                            {ai.engine || 'Gemini 2.5 & Expert Reasoner'}
+                          </span>
+                        </div>
+                        <p className="text-slate-100 text-[12px] leading-relaxed">
+                          {ai.reasoning}
+                        </p>
+                      </div>
+                    )}
 
                     {/* Canonical 8-Question Root Cause Analysis (RCA) Grid */}
                     <div className="space-y-2">

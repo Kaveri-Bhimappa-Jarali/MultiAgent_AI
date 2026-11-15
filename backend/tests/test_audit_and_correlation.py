@@ -1112,7 +1112,7 @@ def test_23_e2e_ingestion_queue_agent_pipeline_correlation_broadcast(db_session)
     assert inc.finding_count >= 2
     assert set(inc.participating_agents) >= {"Authentication Agent", "Endpoint Agent"}
     assert inc.investigation_status == "COMPLETED"
-    assert inc.response_status in ["RECOMMENDED", "PENDING_APPROVAL"]
+    assert inc.response_status in ["RECOMMENDED", "PENDING_APPROVAL", "AUTONOMOUSLY_CONTAINED"]
 
     event_types = [p[0] for p in published]
     assert "AGENT_FINDING_RECORDED" in event_types

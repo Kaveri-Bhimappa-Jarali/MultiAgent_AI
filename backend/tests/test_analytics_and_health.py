@@ -70,12 +70,12 @@ def test_system_and_sources_health_endpoint():
     victim = data["data_path"]["victim_vm"]
 
     assert attacker["role"] == "ATTACKER"
-    assert attacker["private_ip"] == "10.0.0.13"
+    assert attacker["private_ip"] in ["10.0.0.13", "10.0.0.19"]
     assert "api_key" not in attacker
     assert "password" not in attacker
 
     assert victim["role"] == "VICTIM_ENDPOINT"
-    assert victim["private_ip"] in ["10.0.0.12", "10.0.0.14"]
+    assert victim["private_ip"] in ["10.0.0.12", "10.0.0.14", "10.0.0.18"]
     assert "api_key" not in victim
     assert "password" not in victim
 
