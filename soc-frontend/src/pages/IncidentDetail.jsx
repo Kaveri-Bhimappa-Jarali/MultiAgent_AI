@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import { AttackPathGraph } from '../components/correlation/AttackPathGraph'
+import { CorrelationGraph } from '../components/correlation/CorrelationGraph'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import {
@@ -216,6 +217,9 @@ export function IncidentDetail() {
       {incident.attack_path && (
         <AttackPathGraph graph={incident.attack_path} />
       )}
+
+      {/* Sequential Attack Chain Topology Graph */}
+      <CorrelationGraph incident={incident} />
 
       {/* 8-Question Canonical SOC Root Cause Analysis */}
       <div className="rounded-2xl p-6 bg-[#0d121c] border border-[#1e2736] shadow-xl space-y-4">

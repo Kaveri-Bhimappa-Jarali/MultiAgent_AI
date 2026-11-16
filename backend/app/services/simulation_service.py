@@ -596,12 +596,23 @@ sys.exit(0 if sent else 1)
                         except ValueError:
                             pass
 
-                # Allow pipeline 3 seconds to finish rolling detection & agent processing
+                # Allow pipeline up to 15 seconds to finish rolling detection & agent processing
                 append_log("[*] Waiting for SOC detection pipeline & multi-agent correlation...")
-                await asyncio.sleep(3.0)
+                for _ in range(15):
+                    await asyncio.sleep(1.0)
+                    self._correlate_soc_pipeline(db, exec_rec, start_time, datetime.now(timezone.utc))
+                    db.commit()
+                    if exec_rec.soc_alert_status in ["INCIDENT_CREATED", "FINDINGS_RECORDED"]:
+                        break
+                    # If all captured events are processed, we can exit early
+                    if exec_rec.associated_event_ids:
+                        unprocessed = db.query(SecurityEvent).filter(
+                            SecurityEvent.event_id.in_(exec_rec.associated_event_ids),
+                            SecurityEvent.processing_status != "PROCESSED"
+                        ).count()
+                        if unprocessed == 0:
+                            break
 
-                # Correlate events & detections generated during this window
-                self._correlate_soc_pipeline(db, exec_rec, start_time, end_time + timedelta(seconds=5))
                 exec_rec.raw_logs = "\n".join(log_buffer)
                 db.commit()
 
@@ -723,10 +734,17 @@ sys.exit(0 if sent else 1)
         if not execution.start_time:
             return
         end = ensure_utc(execution.end_time) if execution.end_time else datetime.now(timezone.utc)
-        if (datetime.now(timezone.utc) - end).total_seconds() > 300:
+        # Allow refreshing up to 3600s if not yet incident-linked, otherwise 300s
+        max_age = 3600 if execution.soc_alert_status in ["PENDING", "FINDINGS_RECORDED"] else 300
+        if (datetime.now(timezone.utc) - end).total_seconds() > max_age:
             return
         # Refresh late-arriving telemetry/detections while the pipeline drains.
-        self._correlate_soc_pipeline(db, execution, execution.start_time, end + timedelta(seconds=10))
+        effective_end = max(end + timedelta(seconds=120), datetime.now(timezone.utc))
+        self._correlate_soc_pipeline(db, execution, execution.start_time, effective_end)
+        try:
+            db.commit()
+        except Exception:
+            pass
 
     async def stop_simulation(self, db: Session, execution_id: str, reason: str = "User stop") -> AttackSimulationExecution:
         exec_rec = db.query(AttackSimulationExecution).filter(

@@ -296,6 +296,12 @@ def get_lab_nodes_status(db: Session) -> List[Dict[str, Any]]:
     now = datetime.now(timezone.utc)
     statuses = []
 
+    from app.models.agent import AgentFinding
+    from app.models.detection import DetectionFinding
+
+    all_agent_findings = db.query(AgentFinding).all()
+    all_det_findings = db.query(DetectionFinding).all()
+
     for n in nodes:
         # Compute fresh status
         display_status = n.status
@@ -305,6 +311,30 @@ def get_lab_nodes_status(db: Session) -> List[Dict[str, Any]]:
                 display_status = "STALE"
             elif diff > 300 and n.status != "ISOLATED":
                 display_status = "DISCONNECTED"
+
+        # Dynamically compute detections count for this node
+        node_ips = {n.ip_address} if n.ip_address else set()
+        node_tokens = {n.vm_id.lower(), (n.name or "").lower()}
+
+        node_detections = 0
+        for af in all_agent_findings:
+            ev = af.evidence if isinstance(af.evidence, dict) else {}
+            host = str(ev.get("host") or "").lower()
+            src = str(ev.get("source_ip") or "")
+            dst = str(ev.get("destination_ip") or "")
+            title = af.title.lower()
+            if any(tok in host or tok in title for tok in node_tokens if tok) or src in node_ips or dst in node_ips:
+                node_detections += 1
+
+        for df in all_det_findings:
+            ev = df.evidence if isinstance(df.evidence, dict) else {}
+            host = str(ev.get("host") or "").lower()
+            src = str(ev.get("source_ip") or "")
+            dst = str(ev.get("destination_ip") or "")
+            if any(tok in host for tok in node_tokens if tok) or src in node_ips or dst in node_ips:
+                node_detections += 1
+
+        n.detections_count = max(n.detections_count or 0, node_detections)
 
         statuses.append({
             "id": n.id,
@@ -322,4 +352,8 @@ def get_lab_nodes_status(db: Session) -> List[Dict[str, Any]]:
             "last_telemetry_at": utc_isoformat(n.last_telemetry_at) if n.last_telemetry_at else None,
             "system_metrics": n.system_metrics
         })
+    try:
+        db.commit()
+    except Exception:
+        pass
     return statuses

@@ -6,6 +6,7 @@ import { Button } from '../components/ui/Button'
 import { SearchInput } from '../components/ui/SearchInput'
 import { api } from '../api/client'
 import { mapBackendIncident } from '../api/incidentMapper'
+import { CorrelationGraph } from '../components/correlation/CorrelationGraph'
 import {
   Flame,
   Clock,
@@ -23,8 +24,24 @@ export function Incidents() {
   const [search, setSearch] = useState('')
   const [incidents, setIncidents] = useState([])
   const [selectedIncident, setSelectedIncident] = useState(null)
+  const [selectedDetail, setSelectedDetail] = useState(null)
+  const [activeTab, setActiveTab] = useState('graph') // 'graph' or 'timeline'
   const [expandedId, setExpandedId] = useState(null)
   const [isBackendLoaded, setIsBackendLoaded] = useState(false)
+
+  useEffect(() => {
+    if (!selectedIncident?.id) {
+      setSelectedDetail(null)
+      return
+    }
+    let isCurrent = true
+    api.getIncidentDetail(selectedIncident.id)
+      .then(detail => {
+        if (isCurrent) setSelectedDetail(detail)
+      })
+      .catch(() => {})
+    return () => { isCurrent = false }
+  }, [selectedIncident?.id])
 
   const loadIncidents = useCallback(async () => {
     try {
@@ -247,63 +264,95 @@ export function Incidents() {
           )}
         </div>
 
-        {/* Selected Incident Lifecycle Timeline */}
+        {/* Selected Incident Lifecycle Timeline / Attack Graph */}
         <div className="lg:col-span-1">
           {selectedIncident ? (
-            <div className="rounded-2xl p-5 bg-[#0d121c] border border-[#1e2736] shadow-xl sticky top-24 space-y-4">
-              <div className="flex items-center justify-between border-b border-[#182130] pb-3">
-                <div className="flex items-center gap-2">
-                  <span className="p-1 rounded bg-purple-500/20 text-purple-400">
-                    <Clock className="w-4 h-4" />
-                  </span>
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                    Incident Timeline
-                  </h3>
-                </div>
-                <span className="font-mono text-xs text-purple-300 font-bold">
-                  {selectedIncident.id}
-                </span>
+            <div className="space-y-4 sticky top-20">
+              {/* Tab Selector */}
+              <div className="flex items-center gap-2 p-1 rounded-xl bg-[#0d121c] border border-[#1e2736]">
+                <button
+                  onClick={() => setActiveTab('graph')}
+                  className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                    activeTab === 'graph'
+                      ? 'bg-purple-600 text-white shadow-[0_0_12px_rgba(168,85,247,0.4)]'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <GitMerge className="w-3.5 h-3.5" />
+                  <span>Attack Graph</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('timeline')}
+                  className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                    activeTab === 'timeline'
+                      ? 'bg-purple-600 text-white shadow-[0_0_12px_rgba(168,85,247,0.4)]'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>Timeline</span>
+                </button>
               </div>
 
-              <p className="text-[11px] text-slate-400">
-                Sequential lifecycle demonstrating end-to-end signal progression from initial ingestion to automated triage:
-              </p>
-
-              {/* Timeline Vertical Stack */}
-              <div className="space-y-4 relative pl-3 pt-2">
-                <div className="absolute left-6 top-3 bottom-3 w-0.5 bg-gradient-to-b from-purple-500 via-fuchsia-500 to-rose-500" />
-
-                {selectedIncident.timeline?.map((step, idx) => (
-                  <div key={idx} className="relative flex items-start gap-3">
-                    <div className="w-7 h-7 rounded-full bg-[#111827] border border-purple-500/50 flex items-center justify-center text-xs flex-shrink-0 z-10 shadow-md">
-                      {step.icon || '●'}
+              {activeTab === 'graph' ? (
+                <CorrelationGraph incident={selectedDetail || selectedIncident} />
+              ) : (
+                <div className="rounded-2xl p-5 bg-[#0d121c] border border-[#1e2736] shadow-xl space-y-4">
+                  <div className="flex items-center justify-between border-b border-[#182130] pb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="p-1 rounded bg-purple-500/20 text-purple-400">
+                        <Clock className="w-4 h-4" />
+                      </span>
+                      <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                        Incident Timeline
+                      </h3>
                     </div>
-
-                    <div className="flex-1 bg-[#090d16] p-2.5 rounded-xl border border-[#1e2736] text-xs">
-                      <div className="flex items-center justify-between mb-0.5">
-                        <span className="font-bold text-white text-[11px]">{step.stage}</span>
-                        <span className="font-mono text-[10px] text-purple-300">{step.time}</span>
-                      </div>
-                      <p className="text-[11px] text-slate-400 leading-relaxed">
-                        {step.detail}
-                      </p>
-                    </div>
+                    <span className="font-mono text-xs text-purple-300 font-bold">
+                      {selectedIncident.id}
+                    </span>
                   </div>
-                ))}
-              </div>
 
-              {/* Response Outcome Badge */}
-              <div className="p-3 rounded-xl bg-rose-950/20 border border-rose-500/30 text-xs flex items-center justify-between pt-3 mt-4">
-                <span className="text-slate-400">Recommended Action:</span>
-                <span className="font-bold text-rose-300 font-mono">
-                  {selectedIncident.recommendedDecision}
-                </span>
-              </div>
+                  <p className="text-[11px] text-slate-400">
+                    Sequential lifecycle demonstrating end-to-end signal progression from initial ingestion to automated triage:
+                  </p>
+
+                  {/* Timeline Vertical Stack */}
+                  <div className="space-y-4 relative pl-3 pt-2">
+                    <div className="absolute left-6 top-3 bottom-3 w-0.5 bg-gradient-to-b from-purple-500 via-fuchsia-500 to-rose-500" />
+
+                    {selectedIncident.timeline?.map((step, idx) => (
+                      <div key={idx} className="relative flex items-start gap-3">
+                        <div className="w-7 h-7 rounded-full bg-[#111827] border border-purple-500/50 flex items-center justify-center text-xs flex-shrink-0 z-10 shadow-md">
+                          {step.icon || '●'}
+                        </div>
+
+                        <div className="flex-1 bg-[#090d16] p-2.5 rounded-xl border border-[#1e2736] text-xs">
+                          <div className="flex items-center justify-between mb-0.5">
+                            <span className="font-bold text-white text-[11px]">{step.stage}</span>
+                            <span className="font-mono text-[10px] text-purple-300">{step.time}</span>
+                          </div>
+                          <p className="text-[11px] text-slate-400 leading-relaxed">
+                            {step.detail}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Response Outcome Badge */}
+                  <div className="p-3 rounded-xl bg-rose-950/20 border border-rose-500/30 text-xs flex items-center justify-between pt-3 mt-4">
+                    <span className="text-slate-400">Recommended Action:</span>
+                    <span className="font-bold text-rose-300 font-mono">
+                      {selectedIncident.recommendedDecision}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="rounded-2xl p-8 bg-[#0d121c] border border-[#1e2736] text-center text-slate-500 text-xs font-mono">
               <Clock className="w-6 h-6 text-slate-600 mx-auto mb-2" />
-              <p>Select an incident to view forensic timeline</p>
+              <p>Select an incident to view attack graph and timeline</p>
             </div>
           )}
         </div>
